@@ -39,7 +39,9 @@ const allowedOrigins = new Set([
     'https://admin-ecommerce-1.onrender.com',
     'https://admin-ecommerce-o3id.onrender.com',
     'https://frontend-ecommerce-1.onrender.com',
-    'https://frontend-ecommerce.onrender.com'
+    'https://frontend-ecommerce.onrender.com',
+    'https://nhlobo.github.io',
+    'https://backend-ecommerce-3-2jsk.onrender.com'
 ].filter(Boolean));
 
 // CORS configuration
@@ -75,12 +77,25 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Health check endpoint
-app.get('/health', cors(corsOptions), (req, res) => {
-    res.json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        service: 'Premium Hair Backend API'
-    });
+app.get('/health', cors(corsOptions), async (req, res) => {
+    try {
+        const { pool } = require('./src/config/database');
+        await pool.query('SELECT 1');
+        res.json({
+            status: 'healthy',
+            timestamp: new Date().toISOString(),
+            service: 'Premium Hair Backend API',
+            database: 'connected'
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'unhealthy',
+            timestamp: new Date().toISOString(),
+            service: 'Premium Hair Backend API',
+            database: 'disconnected',
+            error: error.message
+        });
+    }
 });
 
 // API Routes
