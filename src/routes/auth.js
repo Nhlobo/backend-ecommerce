@@ -19,7 +19,7 @@ router.post('/login', async (req, res) => {
         }
 
         const admin = await getQuery(
-            'SELECT * FROM admins WHERE email = ? AND is_active = 1',
+            'SELECT * FROM admins WHERE email = $1 AND is_active = 1',
             [email]
         );
 
@@ -33,7 +33,7 @@ router.post('/login', async (req, res) => {
         const isValidPassword = await bcrypt.compare(password, admin.password_hash);
         if (!isValidPassword) {
             await runQuery(
-                'INSERT INTO activity_logs (id, admin_id, action, details) VALUES (?, ?, ?, ?)',
+                'INSERT INTO activity_logs (id, admin_id, action, details) VALUES ($1, $2, $3, $4)',
                 [uuidv4(), admin.id, 'failed_login', 'Invalid password for admin login attempt']
             );
 
@@ -44,7 +44,7 @@ router.post('/login', async (req, res) => {
         }
 
         await runQuery(
-            'UPDATE admins SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE admins SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
             [admin.id]
         );
 
@@ -55,7 +55,7 @@ router.post('/login', async (req, res) => {
         });
 
         await runQuery(
-            'INSERT INTO activity_logs (id, admin_id, action, details) VALUES (?, ?, ?, ?)',
+            'INSERT INTO activity_logs (id, admin_id, action, details) VALUES ($1, $2, $3, $4)',
             [uuidv4(), admin.id, 'login', 'Admin logged in successfully via /api/auth/login']
         );
 
@@ -83,7 +83,7 @@ router.post('/login', async (req, res) => {
 router.post('/logout', authenticateToken, async (req, res) => {
     try {
         await runQuery(
-            'INSERT INTO activity_logs (id, admin_id, action, details) VALUES (?, ?, ?, ?)',
+            'INSERT INTO activity_logs (id, admin_id, action, details) VALUES ($1, $2, $3, $4)',
             [uuidv4(), req.user.id, 'logout', 'Admin logged out via /api/auth/logout']
         );
 

@@ -18,7 +18,7 @@ router.post('/login', async (req, res) => {
 
         // Find admin by email
         const admin = await getQuery(
-            'SELECT * FROM admins WHERE email = ? AND is_active = 1',
+            'SELECT * FROM admins WHERE email = $1 AND is_active = 1',
             [email]
         );
 
@@ -40,7 +40,7 @@ router.post('/login', async (req, res) => {
 
         // Update last login
         await runQuery(
-            'UPDATE admins SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE admins SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
             [admin.id]
         );
 
@@ -53,7 +53,7 @@ router.post('/login', async (req, res) => {
 
         // Log activity
         await runQuery(
-            'INSERT INTO activity_logs (id, admin_id, action, details) VALUES (?, ?, ?, ?)',
+            'INSERT INTO activity_logs (id, admin_id, action, details) VALUES ($1, $2, $3, $4)',
             [require('uuid').v4(), admin.id, 'login', 'Admin logged in successfully']
         );
 
@@ -83,7 +83,7 @@ router.post('/logout', authenticateToken, async (req, res) => {
     try {
         // Log activity
         await runQuery(
-            'INSERT INTO activity_logs (id, admin_id, action, details) VALUES (?, ?, ?, ?)',
+            'INSERT INTO activity_logs (id, admin_id, action, details) VALUES ($1, $2, $3, $4)',
             [require('uuid').v4(), req.user.id, 'logout', 'Admin logged out']
         );
 
@@ -120,7 +120,7 @@ router.get('/dashboard/overview', authenticateToken, async (req, res) => {
         const todayOrders = await getQuery(`
             SELECT COUNT(*) as count, COALESCE(SUM(total_amount), 0) as revenue
             FROM orders
-            WHERE DATE(placed_at) = DATE('now')
+            WHERE DATE(placed_at) = CURRENT_DATE
         `);
 
         // Get pending orders count
@@ -174,13 +174,14 @@ router.get('/orders', authenticateToken, async (req, res) => {
         const params = [];
 
         if (status) {
-            sql += ' AND status = ?';
+            sql += ' AND status = $1';
             params.push(status);
         }
 
         if (search) {
-            sql += ' AND (order_number LIKE ? OR customer_name LIKE ? OR customer_email LIKE ?)';
             const searchTerm = `%${search}%`;
+            const paramIndex = params.length + 1;
+            sql += ` AND (order_number LIKE $${paramIndex} OR customer_name LIKE $${paramIndex + 1} OR customer_email LIKE $${paramIndex + 2})`;
             params.push(searchTerm, searchTerm, searchTerm);
         }
 
@@ -209,7 +210,7 @@ router.get('/payments', authenticateToken, async (req, res) => {
         const params = [];
 
         if (status) {
-            sql += ' AND status = ?';
+            sql += ' AND status = $1';
             params.push(status);
         }
 
@@ -238,8 +239,8 @@ router.get('/customers', authenticateToken, async (req, res) => {
         const params = [];
 
         if (search) {
-            sql += ' AND (full_name LIKE ? OR email LIKE ?)';
             const searchTerm = `%${search}%`;
+            sql += ' AND (full_name LIKE $1 OR email LIKE $2)';
             params.push(searchTerm, searchTerm);
         }
 
@@ -268,13 +269,14 @@ router.get('/products', authenticateToken, async (req, res) => {
         const params = [];
 
         if (category) {
-            sql += ' AND category = ?';
+            sql += ' AND category = $1';
             params.push(category);
         }
 
         if (search) {
-            sql += ' AND (name LIKE ? OR sku LIKE ?)';
             const searchTerm = `%${search}%`;
+            const paramIndex = params.length + 1;
+            sql += ` AND (name LIKE $${paramIndex} OR sku LIKE $${paramIndex + 1})`;
             params.push(searchTerm, searchTerm);
         }
 

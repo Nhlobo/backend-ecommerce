@@ -10,13 +10,14 @@ router.get('/', async (req, res) => {
         const params = [];
 
         if (category) {
-            sql += ' AND category = ?';
+            sql += ' AND category = $1';
             params.push(category);
         }
 
         if (search) {
-            sql += ' AND (name LIKE ? OR description LIKE ?)';
             const searchTerm = `%${search}%`;
+            const paramIndex = params.length + 1;
+            sql += ` AND (name LIKE $${paramIndex} OR description LIKE $${paramIndex + 1})`;
             params.push(searchTerm, searchTerm);
         }
 
@@ -25,7 +26,8 @@ router.get('/', async (req, res) => {
             ? 50
             : Math.min(Math.max(parsedLimit, 1), 100);
 
-        sql += ' ORDER BY created_at DESC LIMIT ?';
+        const limitParamIndex = params.length + 1;
+        sql += ` ORDER BY created_at DESC LIMIT $${limitParamIndex}`;
         params.push(safeLimit);
 
         const products = await allQuery(sql, params);
@@ -72,7 +74,7 @@ router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const product = await getQuery(
-            'SELECT * FROM products WHERE id = ? AND is_active = 1',
+            'SELECT * FROM products WHERE id = $1 AND is_active = 1',
             [id]
         );
 
