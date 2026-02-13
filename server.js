@@ -8,6 +8,7 @@ const adminRoutes = require('./src/routes/admin');
 const productsRoutes = require('./src/routes/products');
 const ordersRoutes = require('./src/routes/orders');
 const authRoutes = require('./src/routes/auth');
+const customersRoutes = require('./src/routes/customers');
 const { initializeDatabase } = require('./src/config/database');
 
 const app = express();
@@ -73,6 +74,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productsRoutes);
 app.use('/api/orders', ordersRoutes);
+app.use('/api/customers', customersRoutes);
 
 // 404 handler
 app.use((req, res) => {

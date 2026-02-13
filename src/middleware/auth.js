@@ -31,7 +31,42 @@ function generateToken(payload) {
     });
 }
 
+/**
+ * Middleware to check if user has required role
+ * @param {Array|string} allowedRoles - Array of allowed roles or single role string
+ */
+function requireRole(...allowedRoles) {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+
+        const userRole = req.user.role;
+        
+        if (!allowedRoles.includes(userRole)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Insufficient permissions'
+            });
+        }
+
+        next();
+    };
+}
+
+/**
+ * Middleware specifically for admin-only routes
+ */
+function requireAdmin(req, res, next) {
+    return requireRole('admin')(req, res, next);
+}
+
 module.exports = {
     authenticateToken,
-    generateToken
+    generateToken,
+    requireRole,
+    requireAdmin
 };
