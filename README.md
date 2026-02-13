@@ -62,7 +62,7 @@ JWT_EXPIRES_IN=24h
 ADMIN_EMAIL=admin@premiumhairsa.co.za
 ADMIN_PASSWORD=Admin@123456
 ADMIN_NAME=Admin User
-DATABASE_PATH=./database.sqlite
+DATABASE_URL=postgresql://username:password@localhost:5432/premium_hair
 FRONTEND_URL=http://localhost:3001
 ADMIN_URL=http://localhost:3000
 ```
@@ -192,7 +192,46 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ## 🗄️ Database
 
-The application uses SQLite for simplicity. The database file is created at `./database.sqlite` by default.
+The application uses PostgreSQL for production-grade data persistence.
+
+### Database Configuration
+
+Set the `DATABASE_URL` environment variable with your PostgreSQL connection string:
+```
+DATABASE_URL=postgresql://username:password@host:port/database
+```
+
+For local development with PostgreSQL:
+```bash
+# Install PostgreSQL (if not already installed)
+# Ubuntu/Debian
+sudo apt-get install postgresql postgresql-contrib
+
+# macOS
+brew install postgresql
+
+# Start PostgreSQL service
+sudo service postgresql start  # Ubuntu/Debian
+brew services start postgresql # macOS
+
+# Create database
+createdb premium_hair
+
+# Set DATABASE_URL in .env
+DATABASE_URL=postgresql://localhost:5432/premium_hair
+```
+
+### Database Initialization
+
+Initialize tables and seed data:
+```bash
+npm run init-db
+```
+
+Or simply start the server (it will auto-initialize):
+```bash
+npm start
+```
 
 ### Database Schema
 
@@ -205,6 +244,20 @@ The application uses SQLite for simplicity. The database file is created at `./d
 - **discounts** - Discount codes
 - **returns** - Return requests
 - **activity_logs** - Admin activity logs
+
+### Connecting to Render PostgreSQL
+
+When using Render's PostgreSQL database:
+
+1. Create a PostgreSQL database in Render
+2. Copy the **External Database URL** from Render dashboard
+3. Set it as `DATABASE_URL` environment variable
+4. The connection uses SSL automatically in production
+
+Example Render DATABASE_URL format:
+```
+postgresql://user:password@dpg-xxxxx.oregon-postgres.render.com/dbname
+```
 
 ## 🌐 Deployment to Render
 
@@ -237,11 +290,13 @@ JWT_EXPIRES_IN=24h
 ADMIN_EMAIL=admin@premiumhairsa.co.za
 ADMIN_PASSWORD=YourSecurePassword123!
 ADMIN_NAME=Admin User
-DATABASE_PATH=/opt/render/project/src/database.sqlite
+DATABASE_URL=<your-render-postgresql-external-url>
 FRONTEND_URL=https://your-frontend-url.onrender.com
 ADMIN_URL=https://your-admin-url.onrender.com
 CORS_ORIGINS=https://premium-hair-admin.onrender.com,https://premium-hair-frontend.onrender.com
 ```
+
+**Note:** Get the `DATABASE_URL` from your Render PostgreSQL database's "External Database URL" field.
 
 ### Step 4: Note Your Backend URL
 
@@ -302,8 +357,36 @@ backend-ecommerce/
 
 ## 🐛 Troubleshooting
 
-### Database Issues
-If you encounter database errors, delete `database.sqlite` and restart the server to recreate it.
+### Database Connection Issues
+
+**PostgreSQL connection errors:**
+1. Verify `DATABASE_URL` is set correctly
+2. Check PostgreSQL service is running: `sudo service postgresql status`
+3. For Render databases, ensure you're using the External Database URL
+4. Check firewall settings allow connections to PostgreSQL port (default: 5432)
+
+**SSL Connection Issues (Render):**
+- The app automatically uses SSL in production (`NODE_ENV=production`)
+- Render PostgreSQL requires SSL connections
+- SSL is disabled for local development
+
+**Database initialization fails:**
+```bash
+# Manually run initialization
+npm run init-db
+
+# Check PostgreSQL logs
+sudo tail -f /var/log/postgresql/postgresql-*.log  # Ubuntu/Debian
+```
+
+### Migrating from SQLite to PostgreSQL
+
+If you were previously using SQLite:
+
+1. This version uses PostgreSQL - SQLite databases are not compatible
+2. Set up a new PostgreSQL database
+3. Run `npm run init-db` to create tables and seed data
+4. Manual data migration would require exporting from SQLite and importing to PostgreSQL
 
 ### CORS Issues
 Make sure your admin and frontend URLs are added to the CORS configuration in `server.js`.

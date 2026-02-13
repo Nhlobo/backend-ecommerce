@@ -31,7 +31,7 @@ router.post('/', async (req, res) => {
 
         for (const item of items) {
             const product = await getQuery(
-                'SELECT * FROM products WHERE id = ? AND is_active = 1',
+                'SELECT * FROM products WHERE id = $1 AND is_active = TRUE',
                 [item.product_id]
             );
 
@@ -71,7 +71,7 @@ router.post('/', async (req, res) => {
                 id, order_number, customer_id, customer_name, customer_email, 
                 customer_phone, total_amount, status, payment_status, 
                 payment_method, shipping_address, billing_address
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', ?, ?, ?)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 'pending', $8, $9, $10)`,
             [
                 orderId, orderNumber, customer_id || uuidv4(), customer_name,
                 customer_email, customer_phone, totalAmount, payment_method,
@@ -83,14 +83,14 @@ router.post('/', async (req, res) => {
         for (const item of orderItems) {
             await runQuery(
                 `INSERT INTO order_items (id, order_id, product_id, product_name, quantity, price_per_unit, total_price)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [item.id, orderId, item.product_id, item.product_name, 
                  item.quantity, item.price_per_unit, item.total_price]
             );
 
             // Update product stock
             await runQuery(
-                'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
+                'UPDATE products SET stock_quantity = stock_quantity - $1 WHERE id = $2',
                 [item.quantity, item.product_id]
             );
         }
@@ -98,7 +98,7 @@ router.post('/', async (req, res) => {
         // Create payment record
         await runQuery(
             `INSERT INTO payments (id, order_id, order_number, customer_name, amount, payment_method, status)
-             VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+             VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
             [uuidv4(), orderId, orderNumber, customer_name, totalAmount, payment_method]
         );
 
@@ -126,7 +126,7 @@ router.get('/:id', async (req, res) => {
         const { id } = req.params;
 
         const order = await getQuery(
-            'SELECT * FROM orders WHERE id = ? OR order_number = ?',
+            'SELECT * FROM orders WHERE id = $1 OR order_number = $2',
             [id, id]
         );
 
@@ -139,7 +139,7 @@ router.get('/:id', async (req, res) => {
 
         // Get order items
         const items = await allQuery(
-            'SELECT * FROM order_items WHERE order_id = ?',
+            'SELECT * FROM order_items WHERE order_id = $1',
             [order.id]
         );
 
