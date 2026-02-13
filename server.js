@@ -9,7 +9,7 @@ const productsRoutes = require('./src/routes/products');
 const ordersRoutes = require('./src/routes/orders');
 const authRoutes = require('./src/routes/auth');
 const customersRoutes = require('./src/routes/customers');
-const { initializeDatabase } = require('./src/config/database');
+const { initializeDatabase, pool } = require('./src/config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -79,7 +79,6 @@ app.use('/api/', limiter);
 // Health check endpoint
 app.get('/health', cors(corsOptions), async (req, res) => {
     try {
-        const { pool } = require('./src/config/database');
         await pool.query('SELECT 1');
         res.json({
             status: 'healthy',
