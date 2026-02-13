@@ -14,7 +14,15 @@ async function login(email, password) {
   }
 
   localStorage.setItem('adminToken', data.data.token);
+  localStorage.setItem('adminUser', JSON.stringify(data.data.admin));
   window.location.href = '/index.html';
+}
+
+function redirectIfAlreadyAuthenticated() {
+  const token = localStorage.getItem('adminToken');
+  if (token) {
+    window.location.href = '/index.html';
+  }
 }
 
 document.getElementById('loginForm').addEventListener('submit', async (event) => {
@@ -31,3 +39,5 @@ document.getElementById('loginForm').addEventListener('submit', async (event) =>
     errorNode.textContent = error.message;
   }
 });
+
+redirectIfAlreadyAuthenticated();

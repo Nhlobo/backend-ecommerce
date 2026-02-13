@@ -16,11 +16,20 @@ const PORT = process.env.PORT || 3000;
 // Security middleware
 app.use(helmet());
 
+function splitOrigins(value) {
+    if (!value) return [];
+    return value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+}
+
 const allowedOrigins = new Set([
     process.env.ADMIN_URL,
     process.env.FRONTEND_URL,
     process.env.ADMIN_URL_PRODUCTION,
     process.env.FRONTEND_URL_PRODUCTION,
+    ...splitOrigins(process.env.CORS_ORIGINS),
     'http://localhost:3000',
     'http://localhost:3001',
     'https://admin-ecommerce-gcuh.onrender.com',
@@ -30,12 +39,7 @@ const allowedOrigins = new Set([
 // CORS configuration
 app.use(cors({
     origin(origin, callback) {
-        // Allow non-browser requests (curl/postman/server-to-server)
-        if (!origin) {
-            return callback(null, true);
-        }
-
-        if (allowedOrigins.has(origin)) {
+        if (!origin || allowedOrigins.has(origin)) {
             return callback(null, true);
         }
 
@@ -50,7 +54,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Rate limiting
 const limiter = rateLimit({
-    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000, // 15 minutes
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000,
     max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100
 });
 app.use('/api/', limiter);
@@ -66,7 +70,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/admin', adminRoutes);
-app.use('/api/auth', authRoutes); // compatibility path for admin clients
+app.use('/api/auth', authRoutes);
 app.use('/api/products', productsRoutes);
 app.use('/api/orders', ordersRoutes);
 
@@ -89,22 +93,16 @@ app.use((err, req, res, next) => {
         });
     }
 
-    res.status(err.status || 500).json({
+    return res.status(err.status || 500).json({
         success: false,
         message: err.message || 'Internal server error'
     });
 });
 
-// Initialize database and start server
 initializeDatabase()
     .then(() => {
         app.listen(PORT, '0.0.0.0', () => {
             console.log(`✅ Backend API server running on port ${PORT}`);
-            console.log(`🌐 Health check: http://localhost:${PORT}/health`);
-            console.log(`🔐 Admin API: http://localhost:${PORT}/api/admin`);
-            console.log(`🔐 Auth API: http://localhost:${PORT}/api/auth`);
-            console.log(`📦 Products API: http://localhost:${PORT}/api/products`);
-            console.log(`🛒 Orders API: http://localhost:${PORT}/api/orders`);
         });
     })
     .catch((err) => {
