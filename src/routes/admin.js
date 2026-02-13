@@ -35,8 +35,8 @@ function handleValidationErrors(req, res) {
 // Helper function to sanitize LIKE patterns (prevent wildcard injection)
 function sanitizeLikePattern(input) {
     if (!input) return '';
-    // Escape special LIKE characters: % and _
-    return input.replace(/[%_]/g, '\\$&');
+    // Escape special LIKE characters: \, %, and _
+    return input.replace(/[\\%_]/g, '\\$&');
 }
 
 // ============================================================================
