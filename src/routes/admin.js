@@ -1313,7 +1313,7 @@ router.patch('/returns/:id/status', [
 
         await runQuery(
             'UPDATE returns SET status = $1, resolved_at = CASE WHEN $1 IN (\'approved\', \'rejected\') THEN CURRENT_TIMESTAMP ELSE resolved_at END WHERE id = $2',
-            [status, id]  // $1 is intentionally reused in the CASE expression
+            [status, id]  // PostgreSQL parameterized queries allow safe reuse of parameter $1 within the same query
         );
 
         await logActivity(req.user.id, 'update_return_status', 

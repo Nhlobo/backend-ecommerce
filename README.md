@@ -527,11 +527,6 @@ RATE_LIMIT_MAX_REQUESTS=100             # Max requests per window
 - **ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME**: Initial admin credentials
 - **FRONTEND_URL, ADMIN_URL, CORS_ORIGINS**: CORS configuration
 - **RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS**: Rate limiting settings
-2. Receive a JWT token in the response
-3. Include the token in subsequent requests:
-```
-Authorization: Bearer YOUR_JWT_TOKEN
-```
 
 ## 🗄️ Database
 
