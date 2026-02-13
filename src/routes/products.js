@@ -6,7 +6,7 @@ const { getQuery, allQuery } = require('../config/database');
 router.get('/', async (req, res) => {
     try {
         const { category, search, limit = 50 } = req.query;
-        let sql = 'SELECT * FROM products WHERE is_active = 1';
+        let sql = 'SELECT * FROM products WHERE is_active = TRUE';
         const params = [];
 
         if (category) {
@@ -51,7 +51,7 @@ router.get('/categories/list', async (req, res) => {
         const categories = await allQuery(`
             SELECT DISTINCT category, COUNT(*) as product_count
             FROM products
-            WHERE is_active = 1
+            WHERE is_active = TRUE
             GROUP BY category
             ORDER BY category
         `);
@@ -74,7 +74,7 @@ router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const product = await getQuery(
-            'SELECT * FROM products WHERE id = $1 AND is_active = 1',
+            'SELECT * FROM products WHERE id = $1 AND is_active = TRUE',
             [id]
         );
 

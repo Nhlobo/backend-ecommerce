@@ -19,7 +19,7 @@ router.post('/login', async (req, res) => {
         }
 
         const admin = await getQuery(
-            'SELECT * FROM admins WHERE email = $1 AND is_active = 1',
+            'SELECT * FROM admins WHERE email = $1 AND is_active = TRUE',
             [email]
         );
 

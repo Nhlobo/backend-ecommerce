@@ -18,7 +18,7 @@ router.post('/login', async (req, res) => {
 
         // Find admin by email
         const admin = await getQuery(
-            'SELECT * FROM admins WHERE email = $1 AND is_active = 1',
+            'SELECT * FROM admins WHERE email = $1 AND is_active = TRUE',
             [email]
         );
 
@@ -134,7 +134,7 @@ router.get('/dashboard/overview', authenticateToken, async (req, res) => {
         const lowStockProducts = await getQuery(`
             SELECT COUNT(*) as count
             FROM products
-            WHERE stock_quantity <= low_stock_threshold AND is_active = 1
+            WHERE stock_quantity <= low_stock_threshold AND is_active = TRUE
         `);
 
         // Get recent transactions

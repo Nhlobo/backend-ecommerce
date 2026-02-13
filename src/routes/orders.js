@@ -31,7 +31,7 @@ router.post('/', async (req, res) => {
 
         for (const item of items) {
             const product = await getQuery(
-                'SELECT * FROM products WHERE id = $1 AND is_active = 1',
+                'SELECT * FROM products WHERE id = $1 AND is_active = TRUE',
                 [item.product_id]
             );
 
