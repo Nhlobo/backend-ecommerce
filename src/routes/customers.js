@@ -337,13 +337,27 @@ router.get('/orders', authenticateToken, async (req, res) => {
             [req.user.id, limit, offset]
         );
 
-        // Get items for each order
-        for (const order of orders) {
-            const items = await allQuery(
-                'SELECT * FROM order_items WHERE order_id = $1',
-                [order.id]
+        // Get all items for these orders in a single query (optimization to avoid N+1 queries)
+        if (orders.length > 0) {
+            const orderIds = orders.map(o => o.id);
+            const allItems = await allQuery(
+                `SELECT * FROM order_items WHERE order_id = ANY($1::varchar[])`,
+                [orderIds]
             );
-            order.items = items;
+
+            // Map items to their respective orders
+            const itemsByOrder = {};
+            for (const item of allItems) {
+                if (!itemsByOrder[item.order_id]) {
+                    itemsByOrder[item.order_id] = [];
+                }
+                itemsByOrder[item.order_id].push(item);
+            }
+
+            // Attach items to orders
+            for (const order of orders) {
+                order.items = itemsByOrder[order.id] || [];
+            }
         }
 
         res.json({
