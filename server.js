@@ -1,110 +1,123 @@
-require('dotenv').config();
+/**
+ * Main Server File
+ * Premium Hair Wigs & Extensions Backend API
+ * Standalone REST API Server (no frontend serving)
+ */
+
 const express = require('express');
-const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const cors = require('cors');
+const morgan = require('morgan');
+require('dotenv').config();
 
-const adminRoutes = require('./src/routes/admin');
-const productsRoutes = require('./src/routes/products');
-const ordersRoutes = require('./src/routes/orders');
-const authRoutes = require('./src/routes/auth');
-const customersRoutes = require('./src/routes/customers');
-const { initializeDatabase, pool } = require('./src/config/database');
+// Import middleware
+const { apiLimiter, loginLimiter, checkLoginAttempts } = require('./middleware/rateLimiter');
+const { authenticateAdmin } = require('./middleware/auth');
+const { validateLogin } = require('./middleware/validator');
 
+// Import controllers
+const authController = require('./controllers/authController');
+
+// Import routes
+const adminRoutes = require('./routes/adminRoutes');
+const publicRoutes = require('./routes/publicRoutes');
+
+// Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
-// Security middleware
+// =====================================================
+// SECURITY MIDDLEWARE
+// =====================================================
+
+// Helmet for security headers
 app.use(helmet());
 
-function splitOrigins(value) {
-    if (!value) return [];
-    return value
-        .split(',')
-        .map((origin) => origin.trim())
-        .filter(Boolean);
-}
-
-const allowedOrigins = new Set([
-    process.env.ADMIN_URL,
+// CORS configuration - Allow multiple origins for standalone deployment
+const allowedOrigins = [
     process.env.FRONTEND_URL,
-    process.env.ADMIN_URL_PRODUCTION,
-    process.env.FRONTEND_URL_PRODUCTION,
-    ...splitOrigins(process.env.CORS_ORIGINS),
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:5173',
-    'https://admin-ecommerce-gcuh.onrender.com',
-    'https://frontend-ecommerce-p6sm.onrender.com',
-    'https://admin-ecommerce-1.onrender.com',
-    'https://admin-ecommerce-o3id.onrender.com',
-    'https://frontend-ecommerce-1.onrender.com',
-    'https://frontend-ecommerce.onrender.com',
+    process.env.ADMIN_URL,
     'https://nhlobo.github.io',
-    'https://backend-ecommerce-3-2jsk.onrender.com'
-].filter(Boolean));
+    'http://localhost:8000',
+    'http://localhost:8001',
+    'http://localhost:3000',
+    'http://127.0.0.1:8000',
+    'http://127.0.0.1:8001',
+    'http://127.0.0.1:3000'
+].filter(Boolean);
 
-// CORS configuration
-const corsOptions = {
-    origin(origin, callback) {
-        if (!origin || allowedOrigins.has(origin)) {
+app.use(cors({
+    origin: function(origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        if (process.env.NODE_ENV !== 'production') {
+            // In development, allow all origins
             return callback(null, true);
         }
-
-        return callback(new Error(`CORS: Origin ${origin} is not allowed`));
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            return callback(null, true);
+        }
+        
+        const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+        return callback(new Error(msg), false);
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range'],
-    maxAge: 86400 // 24 hours
-};
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-app.use(cors(corsOptions));
+// Request logging
+if (process.env.NODE_ENV !== 'production') {
+    app.use(morgan('dev'));
+}
 
-// Handle preflight requests
-app.options('*', cors(corsOptions));
+// Body parsers
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Body parser
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Apply rate limiting to all API routes
+app.use('/api', apiLimiter);
 
-// Rate limiting
-const limiter = rateLimit({
-    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000,
-    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100
-});
-app.use('/api/', limiter);
+// =====================================================
+// API ROUTES
+// =====================================================
 
-// Health check endpoint
-app.get('/health', cors(corsOptions), async (req, res) => {
-    try {
-        await pool.query('SELECT 1');
-        res.json({
-            status: 'healthy',
-            timestamp: new Date().toISOString(),
-            service: 'Premium Hair Backend API',
-            database: 'connected'
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: 'unhealthy',
-            timestamp: new Date().toISOString(),
-            service: 'Premium Hair Backend API',
-            database: 'disconnected',
-            error: error.message
-        });
-    }
+// Health check
+app.get('/api/health', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Server is running',
+        timestamp: new Date().toISOString()
+    });
 });
 
-// API Routes
-app.use('/api/admin', adminRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/products', productsRoutes);
-app.use('/api/orders', ordersRoutes);
-app.use('/api/customers', customersRoutes);
+// Authentication routes
+app.post('/api/admin/login', loginLimiter, checkLoginAttempts, validateLogin, authController.login);
+app.post('/api/admin/logout', authenticateAdmin, authController.logout);
+app.get('/api/admin/me', authenticateAdmin, authController.getCurrentAdmin);
+app.post('/api/admin/change-password', authenticateAdmin, authController.changePassword);
 
-// 404 handler
+// Public/Customer routes (non-authenticated)
+app.use('/api', publicRoutes);
+
+// Admin routes (protected)
+app.use('/api/admin', authenticateAdmin, adminRoutes);
+
+// =====================================================
+// ERROR HANDLING
+// =====================================================
+
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+    res.status(404).json({
+        success: false,
+        message: 'API endpoint not found'
+    });
+});
+
+// 404 handler for non-API routes
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -112,32 +125,54 @@ app.use((req, res) => {
     });
 });
 
-// Error handler
+// Global error handler
 app.use((err, req, res, next) => {
-    console.error('Error:', err);
-
-    if (err.message && err.message.startsWith('CORS:')) {
-        return res.status(403).json({
-            success: false,
-            message: err.message
-        });
-    }
-
-    return res.status(err.status || 500).json({
+    console.error('Server error:', err);
+    
+    res.status(err.status || 500).json({
         success: false,
-        message: err.message || 'Internal server error'
+        message: process.env.NODE_ENV === 'production' 
+            ? 'Internal server error' 
+            : err.message,
+        ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
     });
 });
 
-initializeDatabase()
-    .then(() => {
-        app.listen(PORT, '0.0.0.0', () => {
-            console.log(`✅ Backend API server running on port ${PORT}`);
-        });
-    })
-    .catch((err) => {
-        console.error('Failed to initialize database:', err);
-        process.exit(1);
-    });
+// =====================================================
+// START SERVER
+// =====================================================
+
+app.listen(PORT, () => {
+    console.log('╔════════════════════════════════════════════════════════════╗');
+    console.log('║      Premium Hair Backend API - Standalone Server         ║');
+    console.log('╚════════════════════════════════════════════════════════════╝');
+    console.log('');
+    console.log(`✓ Backend API server running on port ${PORT}`);
+    console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log('');
+    console.log('📍 API Endpoint:');
+    console.log(`   ${process.env.NODE_ENV === 'production' ? 'https://your-backend-url.com' : `http://localhost:${PORT}`}/api`);
+    console.log('');
+    console.log('🔒 Security Features:');
+    console.log('   ✓ Helmet (Security Headers)');
+    console.log('   ✓ Rate Limiting');
+    console.log('   ✓ JWT Authentication');
+    console.log('   ✓ Brute-force Protection');
+    console.log('   ✓ CORS for Frontend/Admin');
+    console.log('');
+    console.log('Press Ctrl+C to stop the server');
+    console.log('');
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('\n⚠️  SIGTERM received. Shutting down gracefully...');
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('\n⚠️  SIGINT received. Shutting down gracefully...');
+    process.exit(0);
+});
 
 module.exports = app;
