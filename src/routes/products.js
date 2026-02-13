@@ -20,8 +20,13 @@ router.get('/', async (req, res) => {
             params.push(searchTerm, searchTerm);
         }
 
+        const parsedLimit = Number.parseInt(limit, 10);
+        const safeLimit = Number.isNaN(parsedLimit)
+            ? 50
+            : Math.min(Math.max(parsedLimit, 1), 100);
+
         sql += ' ORDER BY created_at DESC LIMIT ?';
-        params.push(parseInt(limit));
+        params.push(safeLimit);
 
         const products = await allQuery(sql, params);
 
@@ -34,6 +39,30 @@ router.get('/', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to load products'
+        });
+    }
+});
+
+// Get product categories
+router.get('/categories/list', async (req, res) => {
+    try {
+        const categories = await allQuery(`
+            SELECT DISTINCT category, COUNT(*) as product_count
+            FROM products
+            WHERE is_active = 1
+            GROUP BY category
+            ORDER BY category
+        `);
+
+        res.json({
+            success: true,
+            data: categories
+        });
+    } catch (error) {
+        console.error('Get categories error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to load categories'
         });
     }
 });
@@ -63,30 +92,6 @@ router.get('/:id', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to load product'
-        });
-    }
-});
-
-// Get product categories
-router.get('/categories/list', async (req, res) => {
-    try {
-        const categories = await allQuery(`
-            SELECT DISTINCT category, COUNT(*) as product_count
-            FROM products
-            WHERE is_active = 1
-            GROUP BY category
-            ORDER BY category
-        `);
-
-        res.json({
-            success: true,
-            data: categories
-        });
-    } catch (error) {
-        console.error('Get categories error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to load categories'
         });
     }
 });
