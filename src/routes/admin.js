@@ -240,7 +240,8 @@ router.get('/customers', authenticateToken, async (req, res) => {
 
         if (search) {
             const searchTerm = `%${search}%`;
-            sql += ' AND (full_name LIKE $1 OR email LIKE $2)';
+            const paramIndex = params.length + 1;
+            sql += ` AND (full_name LIKE $${paramIndex} OR email LIKE $${paramIndex + 1})`;
             params.push(searchTerm, searchTerm);
         }
 

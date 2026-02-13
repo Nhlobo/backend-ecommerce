@@ -235,7 +235,7 @@ async function initializeDatabase() {
 async function addSampleData() {
     // Check if we already have sample data
     const productCount = await getQuery('SELECT COUNT(*) as count FROM products');
-    if (productCount && parseInt(productCount.count) > 0) {
+    if (productCount && productCount.count > 0) {
         return; // Sample data already exists
     }
 
