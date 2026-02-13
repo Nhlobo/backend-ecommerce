@@ -2,15 +2,19 @@
  * Pagination utility helper for consistent pagination across API endpoints
  */
 
+// Maximum items per page - can be overridden via environment variable
+const MAX_LIMIT = parseInt(process.env.PAGINATION_MAX_LIMIT, 10) || 100;
+const DEFAULT_LIMIT = parseInt(process.env.PAGINATION_DEFAULT_LIMIT, 10) || 20;
+
 /**
  * Calculate pagination parameters
  * @param {number} page - Page number (1-based)
  * @param {number} limit - Items per page
  * @returns {Object} Pagination parameters with offset, limit, and page
  */
-function paginate(page = 1, limit = 20) {
+function paginate(page = 1, limit = DEFAULT_LIMIT) {
     const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || DEFAULT_LIMIT, 1), MAX_LIMIT);
     const offset = (parsedPage - 1) * parsedLimit;
     
     return {

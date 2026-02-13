@@ -513,6 +513,10 @@ CORS_ORIGINS=https://admin.example.com,https://frontend.example.com
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=900000             # 15 minutes in milliseconds
 RATE_LIMIT_MAX_REQUESTS=100             # Max requests per window
+
+# Pagination
+PAGINATION_MAX_LIMIT=100                # Maximum items per page
+PAGINATION_DEFAULT_LIMIT=20             # Default items per page
 ```
 
 ### Required Variables
@@ -527,6 +531,7 @@ RATE_LIMIT_MAX_REQUESTS=100             # Max requests per window
 - **ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME**: Initial admin credentials
 - **FRONTEND_URL, ADMIN_URL, CORS_ORIGINS**: CORS configuration
 - **RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS**: Rate limiting settings
+- **PAGINATION_MAX_LIMIT, PAGINATION_DEFAULT_LIMIT**: Pagination configuration
 
 ## 🗄️ Database
 
