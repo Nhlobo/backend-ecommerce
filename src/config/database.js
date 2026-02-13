@@ -201,19 +201,19 @@ async function initializeDatabase() {
         // Create default admin if not exists
         const adminExists = await getQuery(
             'SELECT id FROM admins WHERE email = $1',
-            [process.env.ADMIN_EMAIL || 'admin@premiumhairsa.co.za']
+            [process.env.ADMIN_EMAIL || 'admin@premiumhair.com']
         );
 
         if (!adminExists) {
             const hashedPassword = await bcrypt.hash(
-                process.env.ADMIN_PASSWORD || 'Admin@123456',
+                process.env.ADMIN_PASSWORD || 'admin123',
                 10
             );
             await runQuery(
                 `INSERT INTO admins (id, email, password_hash, full_name) VALUES ($1, $2, $3, $4)`,
                 [
                     uuidv4(),
-                    process.env.ADMIN_EMAIL || 'admin@premiumhairsa.co.za',
+                    process.env.ADMIN_EMAIL || 'admin@premiumhair.com',
                     hashedPassword,
                     process.env.ADMIN_NAME || 'Admin User'
                 ]
