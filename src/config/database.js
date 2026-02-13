@@ -21,9 +21,8 @@ async function runQuery(sql, params = []) {
     const client = await pool.connect();
     try {
         const result = await client.query(sql, params);
-        // For INSERT queries, return the inserted row's data
         return {
-            lastID: result.rows[0]?.id,
+            lastID: result.rows.length > 0 ? result.rows[0]?.id : undefined,
             changes: result.rowCount,
             rows: result.rows
         };
