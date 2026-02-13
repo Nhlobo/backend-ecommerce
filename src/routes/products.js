@@ -51,9 +51,9 @@ router.get('/search', async (req, res) => {
         // Search query
         if (q) {
             const searchTerm = `%${sanitizeLikePattern(q)}%`;
-            sql += ` AND (name ILIKE $${paramIndex} OR description ILIKE $${paramIndex + 1} OR sku ILIKE $${paramIndex + 2})`;
-            params.push(searchTerm, searchTerm, searchTerm);
-            paramIndex += 3;
+            sql += ` AND (name ILIKE $${paramIndex} OR description ILIKE $${paramIndex} OR sku ILIKE $${paramIndex})`;
+            params.push(searchTerm);
+            paramIndex++;
         }
 
         // Category filter
