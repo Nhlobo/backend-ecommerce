@@ -33,12 +33,17 @@ const allowedOrigins = new Set([
     ...splitOrigins(process.env.CORS_ORIGINS),
     'http://localhost:3000',
     'http://localhost:3001',
+    'http://localhost:5173',
     'https://admin-ecommerce-gcuh.onrender.com',
-    'https://frontend-ecommerce-p6sm.onrender.com'
+    'https://frontend-ecommerce-p6sm.onrender.com',
+    'https://admin-ecommerce-1.onrender.com',
+    'https://admin-ecommerce-o3id.onrender.com',
+    'https://frontend-ecommerce-1.onrender.com',
+    'https://frontend-ecommerce.onrender.com'
 ].filter(Boolean));
 
 // CORS configuration
-app.use(cors({
+const corsOptions = {
     origin(origin, callback) {
         if (!origin || allowedOrigins.has(origin)) {
             return callback(null, true);
@@ -46,8 +51,17 @@ app.use(cors({
 
         return callback(new Error(`CORS: Origin ${origin} is not allowed`));
     },
-    credentials: true
-}));
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    maxAge: 86400 // 24 hours
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Body parser
 app.use(express.json());
@@ -61,7 +75,7 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', cors(corsOptions), (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
