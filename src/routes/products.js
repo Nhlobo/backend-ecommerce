@@ -3,6 +3,13 @@ const router = express.Router();
 const { getQuery, allQuery } = require('../config/database');
 const { getPaginationParams, buildPaginationMeta } = require('../utils/pagination');
 
+// Helper function to sanitize LIKE patterns (prevent wildcard injection)
+function sanitizeLikePattern(input) {
+    if (!input) return '';
+    // Escape special LIKE characters: % and _
+    return input.replace(/[%_]/g, '\\$&');
+}
+
 // Get featured products
 router.get('/featured', async (req, res) => {
     try {
@@ -43,7 +50,7 @@ router.get('/search', async (req, res) => {
 
         // Search query
         if (q) {
-            const searchTerm = `%${q}%`;
+            const searchTerm = `%${sanitizeLikePattern(q)}%`;
             sql += ` AND (name ILIKE $${paramIndex} OR description ILIKE $${paramIndex + 1} OR sku ILIKE $${paramIndex + 2})`;
             params.push(searchTerm, searchTerm, searchTerm);
             paramIndex += 3;

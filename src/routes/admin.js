@@ -32,6 +32,13 @@ function handleValidationErrors(req, res) {
     return null;
 }
 
+// Helper function to sanitize LIKE patterns (prevent wildcard injection)
+function sanitizeLikePattern(input) {
+    if (!input) return '';
+    // Escape special LIKE characters: % and _
+    return input.replace(/[%_]/g, '\\$&');
+}
+
 // ============================================================================
 // AUTHENTICATION ENDPOINTS
 // ============================================================================
@@ -248,8 +255,7 @@ router.get('/dashboard/stats', authenticateToken, async (req, res) => {
                 COUNT(*) as order_count,
                 COALESCE(SUM(total_amount), 0) as revenue
             FROM orders
-            ${dateFilter}
-            AND payment_status = 'completed'
+            ${dateFilter ? dateFilter + ' AND' : 'WHERE'} payment_status = 'completed'
             GROUP BY payment_method
         `, params);
 
@@ -260,8 +266,7 @@ router.get('/dashboard/stats', authenticateToken, async (req, res) => {
                 COALESCE(SUM(total_amount), 0) as total_revenue,
                 COALESCE(AVG(total_amount), 0) as avg_order_value
             FROM orders
-            ${dateFilter}
-            AND payment_status = 'completed'
+            ${dateFilter ? dateFilter + ' AND' : 'WHERE'} payment_status = 'completed'
         `, params);
 
         res.json({
@@ -304,7 +309,7 @@ router.get('/products', authenticateToken, async (req, res) => {
         }
 
         if (search) {
-            const searchTerm = `%${search}%`;
+            const searchTerm = `%${sanitizeLikePattern(search)}%`;
             sql += ` AND (name ILIKE $${paramIndex} OR sku ILIKE $${paramIndex})`;
             params.push(searchTerm);
             paramIndex++;
@@ -313,7 +318,7 @@ router.get('/products', authenticateToken, async (req, res) => {
         // Get total count
         const countSql = sql.replace('SELECT *', 'SELECT COUNT(*) as total');
         const totalResult = await getQuery(countSql, params);
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         // Get paginated results
         sql += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
@@ -552,7 +557,7 @@ router.get('/orders', authenticateToken, async (req, res) => {
         }
 
         if (search) {
-            const searchTerm = `%${search}%`;
+            const searchTerm = `%${sanitizeLikePattern(search)}%`;
             sql += ` AND (order_number ILIKE $${paramIndex} OR customer_name ILIKE $${paramIndex} OR customer_email ILIKE $${paramIndex})`;
             params.push(searchTerm);
             paramIndex++;
@@ -561,7 +566,7 @@ router.get('/orders', authenticateToken, async (req, res) => {
         // Get total count
         const countSql = sql.replace('SELECT *', 'SELECT COUNT(*) as total');
         const totalResult = await getQuery(countSql, params);
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         // Get paginated results
         sql += ` ORDER BY placed_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
@@ -707,33 +712,6 @@ router.patch('/orders/:id/payment-status', [
 // ============================================================================
 // CUSTOMER MANAGEMENT ENDPOINTS
 // ============================================================================
-router.get('/payments', authenticateToken, async (req, res) => {
-    try {
-        const { status } = req.query;
-        let sql = 'SELECT * FROM payments WHERE 1=1';
-        const params = [];
-
-        if (status) {
-            sql += ' AND status = $1';
-            params.push(status);
-        }
-
-        sql += ' ORDER BY created_at DESC LIMIT 100';
-
-        const payments = await allQuery(sql, params);
-
-        res.json({
-            success: true,
-            data: payments
-        });
-    } catch (error) {
-        console.error('Get payments error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to load payments'
-        });
-    }
-});
 
 // Get all customers with pagination
 router.get('/customers', authenticateToken, async (req, res) => {
@@ -746,7 +724,7 @@ router.get('/customers', authenticateToken, async (req, res) => {
         let paramIndex = 1;
 
         if (search) {
-            const searchTerm = `%${search}%`;
+            const searchTerm = `%${sanitizeLikePattern(search)}%`;
             sql += ` AND (full_name ILIKE $${paramIndex} OR email ILIKE $${paramIndex})`;
             params.push(searchTerm);
             paramIndex++;
@@ -755,7 +733,7 @@ router.get('/customers', authenticateToken, async (req, res) => {
         // Get total count
         const countSql = sql.replace('SELECT id, email, full_name, phone, is_active, created_at', 'SELECT COUNT(*) as total');
         const totalResult = await getQuery(countSql, params);
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         // Get paginated results
         sql += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
@@ -883,7 +861,7 @@ router.get('/customers/:id/orders', authenticateToken, async (req, res) => {
             'SELECT COUNT(*) as total FROM orders WHERE customer_id = $1',
             [id]
         );
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         // Get paginated orders
         const orders = await allQuery(
@@ -929,7 +907,7 @@ router.get('/payments', authenticateToken, async (req, res) => {
         // Get total count
         const countSql = sql.replace('SELECT *', 'SELECT COUNT(*) as total');
         const totalResult = await getQuery(countSql, params);
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         // Get paginated results
         sql += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
@@ -1040,7 +1018,7 @@ router.get('/discounts', authenticateToken, async (req, res) => {
         
         // Get total count
         const totalResult = await getQuery('SELECT COUNT(*) as total FROM discounts');
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         const discounts = await allQuery(
             'SELECT * FROM discounts ORDER BY created_at DESC LIMIT $1 OFFSET $2',
@@ -1259,7 +1237,7 @@ router.get('/returns', authenticateToken, async (req, res) => {
         
         // Get total count
         const totalResult = await getQuery('SELECT COUNT(*) as total FROM returns');
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         const returns = await allQuery(
             'SELECT * FROM returns ORDER BY created_at DESC LIMIT $1 OFFSET $2',
@@ -1335,7 +1313,7 @@ router.patch('/returns/:id/status', [
 
         await runQuery(
             'UPDATE returns SET status = $1, resolved_at = CASE WHEN $1 IN (\'approved\', \'rejected\') THEN CURRENT_TIMESTAMP ELSE resolved_at END WHERE id = $2',
-            [status, id]
+            [status, id]  // $1 is intentionally reused in the CASE expression
         );
 
         await logActivity(req.user.id, 'update_return_status', 
@@ -1432,7 +1410,7 @@ router.get('/users', authenticateToken, async (req, res) => {
         
         // Get total count
         const totalResult = await getQuery('SELECT COUNT(*) as total FROM admins');
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         const users = await allQuery(
             'SELECT id, email, full_name, is_active, created_at, last_login FROM admins ORDER BY created_at DESC LIMIT $1 OFFSET $2',
@@ -1671,8 +1649,7 @@ router.get('/reports/sales', authenticateToken, async (req, res) => {
                 COUNT(*) as order_count,
                 COALESCE(SUM(total_amount), 0) as revenue
             FROM orders
-            ${dateFilter}
-            AND payment_status = 'completed'
+            ${dateFilter ? dateFilter + ' AND' : 'WHERE'} payment_status = 'completed'
             GROUP BY DATE(placed_at)
             ORDER BY date DESC
         `, params);
@@ -1685,8 +1662,7 @@ router.get('/reports/sales', authenticateToken, async (req, res) => {
                 COUNT(*) as order_count,
                 COALESCE(SUM(total_amount), 0) as total_spent
             FROM orders
-            ${dateFilter}
-            AND payment_status = 'completed'
+            ${dateFilter ? dateFilter + ' AND' : 'WHERE'} payment_status = 'completed'
             GROUP BY customer_name, customer_email
             ORDER BY total_spent DESC
             LIMIT 10
@@ -1787,7 +1763,7 @@ router.get('/compliance/vat', authenticateToken, async (req, res) => {
         const totalResult = await getQuery(
             'SELECT COUNT(*) as total FROM orders WHERE payment_status = \'completed\''
         );
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         const vatRecords = await allQuery(`
             SELECT 
@@ -1825,7 +1801,7 @@ router.get('/compliance/activity-logs', authenticateToken, async (req, res) => {
         
         // Get total count
         const totalResult = await getQuery('SELECT COUNT(*) as total FROM activity_logs');
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         const logs = await allQuery(`
             SELECT al.*, a.full_name as admin_name
@@ -1890,7 +1866,7 @@ router.get('/security/events', authenticateToken, async (req, res) => {
         const totalResult = await getQuery(
             'SELECT COUNT(*) as total FROM activity_logs WHERE action IN (\'login\', \'logout\', \'failed_login\')'
         );
-        const total = parseInt(totalResult.total);
+        const total = parseInt(totalResult.total, 10);
 
         const events = await allQuery(`
             SELECT * FROM activity_logs
