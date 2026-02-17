@@ -131,7 +131,7 @@ const createOrder = async (req, res) => {
                     shipping_address_line1, shipping_address_line2, shipping_city,
                     shipping_province, shipping_postal_code, customer_notes, placed_at
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CURRENT_TIMESTAMP
                 ) RETURNING *`,
                 [
                     userId,
@@ -152,8 +152,7 @@ const createOrder = async (req, res) => {
                     address.city,
                     address.province,
                     address.postal_code,
-                    customer_notes || null,
-                    new Date()
+                    customer_notes || null
                 ]
             );
 
@@ -513,21 +512,15 @@ const updateOrderStatus = async (req, res) => {
 
         // Set timestamps based on status
         if (status === 'shipped' && !currentOrder.shipped_at) {
-            updateFields.push(`shipped_at = $${paramIndex}`);
-            updateParams.push(new Date());
-            paramIndex++;
+            updateFields.push(`shipped_at = CURRENT_TIMESTAMP`);
         }
 
         if (status === 'delivered' && !currentOrder.delivered_at) {
-            updateFields.push(`delivered_at = $${paramIndex}`);
-            updateParams.push(new Date());
-            paramIndex++;
+            updateFields.push(`delivered_at = CURRENT_TIMESTAMP`);
         }
 
         if (status === 'cancelled' && !currentOrder.cancelled_at) {
-            updateFields.push(`cancelled_at = $${paramIndex}`);
-            updateParams.push(new Date());
-            paramIndex++;
+            updateFields.push(`cancelled_at = CURRENT_TIMESTAMP`);
         }
 
         // Update order
