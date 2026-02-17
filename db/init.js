@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const { pool, query } = require('./connection');
 require('dotenv').config();
 
