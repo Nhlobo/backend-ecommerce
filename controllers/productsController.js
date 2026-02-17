@@ -908,9 +908,22 @@ const searchProducts = async (req, res) => {
         let paramCount = 1;
 
         // Full-text search using search_vector
-        const searchQuery = q.trim().split(' ').join(' & ');
+        // Clean and prepare search query - remove special characters that could cause issues
+        const cleanQuery = q.trim()
+            .replace(/[^\w\s]/g, ' ') // Remove special characters
+            .split(/\s+/)
+            .filter(term => term.length > 0)
+            .join(' & '); // Join with AND operator for full-text search
+        
+        if (cleanQuery.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid search query'
+            });
+        }
+
         conditions.push(`p.search_vector @@ to_tsquery('english', $${paramCount})`);
-        params.push(searchQuery);
+        params.push(cleanQuery);
         paramCount++;
 
         // Filter by category

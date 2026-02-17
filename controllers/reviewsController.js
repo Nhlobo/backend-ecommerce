@@ -133,13 +133,16 @@ const getProductReviews = async (req, res) => {
         const offset = (page - 1) * limit;
         
         // Determine sort order
-        let orderBy = 'pr.created_at DESC'; // recent
-        if (sort === 'helpful') {
-            orderBy = 'pr.helpful_count DESC, pr.created_at DESC';
-        } else if (sort === 'rating_high') {
-            orderBy = 'pr.rating DESC, pr.created_at DESC';
-        } else if (sort === 'rating_low') {
-            orderBy = 'pr.rating ASC, pr.created_at DESC';
+        let orderBy = 'pr.created_at DESC'; // recent (default)
+        const sortOptions = {
+            'recent': 'pr.created_at DESC',
+            'helpful': 'pr.helpful_count DESC, pr.created_at DESC',
+            'rating_high': 'pr.rating DESC, pr.created_at DESC',
+            'rating_low': 'pr.rating ASC, pr.created_at DESC'
+        };
+        
+        if (sortOptions[sort]) {
+            orderBy = sortOptions[sort];
         }
 
         // Get approved reviews only for public access

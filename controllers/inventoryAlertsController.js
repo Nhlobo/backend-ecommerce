@@ -19,7 +19,7 @@ const checkLowStock = async (req, res) => {
              FROM products
              WHERE stock_quantity <= low_stock_threshold
              AND stock_quantity > 0
-             AND is_active = true
+             AND active = true
              ORDER BY stock_quantity ASC`
         );
 
@@ -78,10 +78,10 @@ const getLowStockProducts = async (req, res) => {
         const result = await query(
             `SELECT 
                 id, name, sku, stock_quantity, low_stock_threshold,
-                base_price, category, is_active
+                base_price, category, active
              FROM products
              WHERE stock_quantity <= low_stock_threshold
-             AND is_active = true
+             AND active = true
              ORDER BY stock_quantity ASC`
         );
 
@@ -165,7 +165,7 @@ const getInventoryStats = async (req, res) => {
                 SUM(stock_quantity) as total_units,
                 AVG(stock_quantity) as avg_stock_per_product
              FROM products
-             WHERE is_active = true`
+             WHERE active = true`
         );
 
         res.json({

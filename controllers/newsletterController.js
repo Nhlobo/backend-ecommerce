@@ -224,14 +224,15 @@ const getSubscribers = async (req, res) => {
         const { page = 1, limit = 50, status = 'active' } = req.query;
         const offset = (page - 1) * limit;
 
-        let whereClause = '';
-        if (status === 'active') {
-            whereClause = 'WHERE is_verified = true AND unsubscribed_at IS NULL';
-        } else if (status === 'pending') {
-            whereClause = 'WHERE is_verified = false AND unsubscribed_at IS NULL';
-        } else if (status === 'unsubscribed') {
-            whereClause = 'WHERE unsubscribed_at IS NOT NULL';
-        }
+        // Build WHERE clause with safe values only
+        const statusFilters = {
+            'active': 'WHERE is_verified = true AND unsubscribed_at IS NULL',
+            'pending': 'WHERE is_verified = false AND unsubscribed_at IS NULL',
+            'unsubscribed': 'WHERE unsubscribed_at IS NOT NULL',
+            'all': ''
+        };
+        
+        const whereClause = statusFilters[status] || statusFilters['all'];
 
         const subscribers = await query(
             `SELECT id, email, is_verified, subscribed_at, unsubscribed_at
@@ -277,14 +278,15 @@ const exportSubscribers = async (req, res) => {
     try {
         const { status = 'active' } = req.query;
 
-        let whereClause = '';
-        if (status === 'active') {
-            whereClause = 'WHERE is_verified = true AND unsubscribed_at IS NULL';
-        } else if (status === 'pending') {
-            whereClause = 'WHERE is_verified = false AND unsubscribed_at IS NULL';
-        } else if (status === 'unsubscribed') {
-            whereClause = 'WHERE unsubscribed_at IS NOT NULL';
-        }
+        // Build WHERE clause with safe values only
+        const statusFilters = {
+            'active': 'WHERE is_verified = true AND unsubscribed_at IS NULL',
+            'pending': 'WHERE is_verified = false AND unsubscribed_at IS NULL',
+            'unsubscribed': 'WHERE unsubscribed_at IS NOT NULL',
+            'all': ''
+        };
+        
+        const whereClause = statusFilters[status] || statusFilters['all'];
 
         const subscribers = await query(
             `SELECT email, is_verified, subscribed_at, unsubscribed_at
