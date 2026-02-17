@@ -7,6 +7,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { query } = require('../db/connection');
+const { sendEmailVerification, sendPasswordReset } = require('../services/emailService');
 
 /**
  * Helper function to log security events
@@ -95,15 +96,25 @@ const register = async (req, res) => {
         // Hash password with bcrypt (12 rounds)
         const passwordHash = await bcrypt.hash(password, 12);
 
+        // Generate email verification token
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const verificationExpires = new Date();
+        verificationExpires.setHours(verificationExpires.getHours() + 24); // 24 hours expiry
+
         // Create user
         const result = await query(
-            `INSERT INTO users (name, email, password_hash)
-             VALUES ($1, $2, $3)
+            `INSERT INTO users (name, email, password_hash, email_verified, email_verification_token, email_verification_expires)
+             VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING id, name, email, created_at`,
-            [name, email.toLowerCase(), passwordHash]
+            [name, email.toLowerCase(), passwordHash, false, verificationToken, verificationExpires]
         );
 
         const user = result.rows[0];
+
+        // Send verification email (non-blocking)
+        sendEmailVerification(user.email, verificationToken, user.name).catch(error => {
+            console.error('Failed to send verification email:', error);
+        });
 
         // Generate JWT token
         const token = jwt.sign(
@@ -128,13 +139,14 @@ const register = async (req, res) => {
 
         res.status(201).json({
             success: true,
-            message: 'Registration successful',
+            message: 'Registration successful. Please check your email to verify your account.',
             data: {
                 token,
                 user: {
                     id: user.id,
                     name: user.name,
                     email: user.email,
+                    emailVerified: false,
                     createdAt: user.created_at
                 }
             }
@@ -176,7 +188,7 @@ const login = async (req, res) => {
 
         // Find user
         const result = await query(
-            'SELECT id, name, email, password_hash, created_at FROM users WHERE email = $1',
+            'SELECT id, name, email, password_hash, email_verified, created_at FROM users WHERE email = $1',
             [email.toLowerCase()]
         );
 
@@ -245,6 +257,7 @@ const login = async (req, res) => {
                     id: user.id,
                     name: user.name,
                     email: user.email,
+                    emailVerified: user.email_verified || false,
                     createdAt: user.created_at
                 }
             }
@@ -474,6 +487,11 @@ const forgotPassword = async (req, res) => {
             'info'
         );
 
+        // Send password reset email (non-blocking)
+        sendPasswordReset(user.email, resetToken, user.name || 'Customer').catch(error => {
+            console.error('Failed to send password reset email:', error);
+        });
+
         // In production, send email with resetToken here
         // For now, return success message
         res.json({
@@ -609,10 +627,215 @@ const resetPassword = async (req, res) => {
     }
 };
 
+/**
+ * Verify Email
+ */
+const verifyEmail = async (req, res) => {
+    const { token } = req.body;
+    const ipAddress = req.ip;
+    const userAgent = req.get('user-agent');
+
+    try {
+        // Validate input
+        if (!token) {
+            return res.status(400).json({
+                success: false,
+                message: 'Verification token is required'
+            });
+        }
+
+        // Find user with matching token that hasn't expired
+        const result = await query(
+            `SELECT id, name, email, email_verified
+             FROM users
+             WHERE email_verification_token = $1
+             AND email_verification_expires > NOW()`,
+            [token]
+        );
+
+        if (result.rows.length === 0) {
+            await logSecurityEvent(
+                'email_verification_failed',
+                null,
+                ipAddress,
+                userAgent,
+                { reason: 'invalid_or_expired_token' },
+                'low'
+            );
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid or expired verification token'
+            });
+        }
+
+        const user = result.rows[0];
+
+        // Check if already verified
+        if (user.email_verified) {
+            return res.json({
+                success: true,
+                message: 'Email already verified'
+            });
+        }
+
+        // Mark email as verified
+        await query(
+            `UPDATE users
+             SET email_verified = true,
+                 email_verification_token = NULL,
+                 email_verification_expires = NULL,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [user.id]
+        );
+
+        // Log successful verification
+        await logSecurityEvent(
+            'email_verified',
+            user.id,
+            ipAddress,
+            userAgent,
+            { email: user.email },
+            'info'
+        );
+
+        res.json({
+            success: true,
+            message: 'Email verified successfully'
+        });
+
+    } catch (error) {
+        console.error('Email verification error:', error);
+        await logSecurityEvent(
+            'email_verification_error',
+            null,
+            ipAddress,
+            userAgent,
+            { error: error.message },
+            'high'
+        );
+        res.status(500).json({
+            success: false,
+            message: 'Email verification failed. Please try again.'
+        });
+    }
+};
+
+/**
+ * Resend Email Verification
+ */
+const resendVerification = async (req, res) => {
+    const { email } = req.body;
+    const ipAddress = req.ip;
+    const userAgent = req.get('user-agent');
+
+    try {
+        // Validate input
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email is required'
+            });
+        }
+
+        // Validate email format
+        if (!isValidEmail(email)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid email format'
+            });
+        }
+
+        // Find user
+        const result = await query(
+            'SELECT id, name, email, email_verified FROM users WHERE email = $1',
+            [email.toLowerCase()]
+        );
+
+        // Always return success to prevent email enumeration
+        if (result.rows.length === 0) {
+            await logSecurityEvent(
+                'verification_resend_requested',
+                null,
+                ipAddress,
+                userAgent,
+                { email, reason: 'user_not_found' },
+                'low'
+            );
+            return res.json({
+                success: true,
+                message: 'If the email exists and is not verified, a new verification link will be sent'
+            });
+        }
+
+        const user = result.rows[0];
+
+        // Check if already verified
+        if (user.email_verified) {
+            return res.json({
+                success: true,
+                message: 'Email is already verified'
+            });
+        }
+
+        // Generate new verification token
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const verificationExpires = new Date();
+        verificationExpires.setHours(verificationExpires.getHours() + 24); // 24 hours expiry
+
+        // Update user with new token
+        await query(
+            `UPDATE users
+             SET email_verification_token = $1,
+                 email_verification_expires = $2,
+                 updated_at = NOW()
+             WHERE id = $3`,
+            [verificationToken, verificationExpires, user.id]
+        );
+
+        // Send verification email (non-blocking)
+        sendEmailVerification(user.email, verificationToken, user.name).catch(error => {
+            console.error('Failed to send verification email:', error);
+        });
+
+        // Log the event
+        await logSecurityEvent(
+            'verification_resend_requested',
+            user.id,
+            ipAddress,
+            userAgent,
+            { email: user.email },
+            'info'
+        );
+
+        res.json({
+            success: true,
+            message: 'If the email exists and is not verified, a new verification link will be sent'
+        });
+
+    } catch (error) {
+        console.error('Resend verification error:', error);
+        await logSecurityEvent(
+            'verification_resend_error',
+            null,
+            ipAddress,
+            userAgent,
+            { error: error.message },
+            'high'
+        );
+        res.status(500).json({
+            success: false,
+            message: 'Failed to resend verification email. Please try again.'
+        });
+    }
+};
+
 module.exports = {
     register,
     login,
     refreshToken,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    verifyEmail,
+    resendVerification
 };

@@ -210,6 +210,7 @@ const requireRole = (...allowedRoles) => {
 
 module.exports = {
     authenticateToken,
+    authenticateCustomer: authenticateToken, // Alias for clarity
     authenticateAdmin,
     requireAdmin,
     requireSuperAdmin,
