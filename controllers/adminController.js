@@ -184,7 +184,7 @@ const updateCustomer = async (req, res) => {
 
         // Log admin action
         await logAdminAction(
-            req.user?.id,
+            req.admin?.id,
             'update_customer',
             'customer',
             id,
@@ -336,7 +336,7 @@ const updateStock = async (req, res) => {
 
         // Log admin action
         await logAdminAction(
-            req.user?.id,
+            req.admin?.id,
             'update_stock',
             'variant',
             variantId,
