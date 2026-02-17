@@ -231,11 +231,24 @@ const getProduct = async (req, res) => {
         `;
         const variantsResult = await query(variantsQuery, [id]);
 
+        // Get average rating and review count
+        const ratingQuery = `
+            SELECT 
+                COALESCE(AVG(rating), 0) as average_rating,
+                COUNT(*) as review_count
+            FROM product_reviews
+            WHERE product_id = $1 AND is_approved = true
+        `;
+        const ratingResult = await query(ratingQuery, [id]);
+        const { average_rating, review_count } = ratingResult.rows[0];
+
         res.json({
             success: true,
             data: {
                 ...product,
-                variants: variantsResult.rows
+                variants: variantsResult.rows,
+                averageRating: parseFloat(average_rating) || 0,
+                reviewCount: parseInt(review_count) || 0
             }
         });
 
@@ -862,11 +875,129 @@ const deleteVariant = async (req, res) => {
     }
 };
 
+/**
+ * Search products with full-text search (PUBLIC)
+ * GET /api/products/search
+ */
+const searchProducts = async (req, res) => {
+    try {
+        const {
+            q, // search query
+            category_id,
+            price_min,
+            price_max,
+            page = 1,
+            limit = 20
+        } = req.query;
+
+        if (!q || q.trim().length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Search query is required'
+            });
+        }
+
+        // Validate pagination
+        const pageNum = Math.max(1, parseInt(page));
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+        const offset = (pageNum - 1) * limitNum;
+
+        // Build WHERE conditions
+        const conditions = ['p.active = true'];
+        const params = [];
+        let paramCount = 1;
+
+        // Full-text search using search_vector
+        const searchQuery = q.trim().split(' ').join(' & ');
+        conditions.push(`p.search_vector @@ to_tsquery('english', $${paramCount})`);
+        params.push(searchQuery);
+        paramCount++;
+
+        // Filter by category
+        if (category_id) {
+            conditions.push(`p.category_id = $${paramCount}`);
+            params.push(category_id);
+            paramCount++;
+        }
+
+        // Filter by price range
+        if (price_min) {
+            conditions.push(`p.base_price >= $${paramCount}`);
+            params.push(parseFloat(price_min));
+            paramCount++;
+        }
+
+        if (price_max) {
+            conditions.push(`p.base_price <= $${paramCount}`);
+            params.push(parseFloat(price_max));
+            paramCount++;
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        // Search products with ranking
+        const productsQuery = `
+            SELECT 
+                p.*,
+                c.name as category_name,
+                ts_rank(p.search_vector, to_tsquery('english', $1)) as rank,
+                COALESCE(
+                    (SELECT AVG(rating) FROM product_reviews WHERE product_id = p.id AND is_approved = true),
+                    0
+                ) as average_rating,
+                COALESCE(
+                    (SELECT COUNT(*) FROM product_reviews WHERE product_id = p.id AND is_approved = true),
+                    0
+                ) as review_count
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            ${whereClause}
+            ORDER BY rank DESC, p.created_at DESC
+            LIMIT $${paramCount} OFFSET $${paramCount + 1}
+        `;
+        params.push(limitNum, offset);
+        
+        const productsResult = await query(productsQuery, params);
+
+        // Get total count for pagination
+        const countParams = params.slice(0, paramCount - 1);
+        const countQuery = `
+            SELECT COUNT(*) 
+            FROM products p 
+            ${whereClause}
+        `;
+        const countResult = await query(countQuery, countParams);
+        const totalProducts = parseInt(countResult.rows[0].count);
+
+        res.json({
+            success: true,
+            data: {
+                query: q,
+                products: productsResult.rows,
+                pagination: {
+                    currentPage: pageNum,
+                    totalPages: Math.ceil(totalProducts / limitNum),
+                    totalProducts,
+                    limit: limitNum
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Search products error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to search products. Please try again.'
+        });
+    }
+};
+
 module.exports = {
     // Public routes
     listProducts,
     getProduct,
     getProductVariants,
+    searchProducts,
     // Admin routes
     createProduct,
     updateProduct,

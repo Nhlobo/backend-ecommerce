@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const reportsController = require('../controllers/reportsController');
+const inventoryAlertsController = require('../controllers/inventoryAlertsController');
 const { authenticateAdmin } = require('../middleware/auth');
 
 // All routes require admin authentication
@@ -37,6 +38,24 @@ router.put('/users/:id', adminController.updateCustomer);
  * Get products with low stock
  */
 router.get('/inventory/low-stock', adminController.getLowStock);
+
+/**
+ * GET /api/admin/inventory/stats
+ * Get inventory statistics
+ */
+router.get('/inventory/stats', inventoryAlertsController.getInventoryStats);
+
+/**
+ * POST /api/admin/inventory/check-alerts
+ * Check and send low stock alerts
+ */
+router.post('/inventory/check-alerts', inventoryAlertsController.checkLowStock);
+
+/**
+ * PUT /api/admin/inventory/:productId/threshold
+ * Update stock threshold for a product
+ */
+router.put('/inventory/:productId/threshold', inventoryAlertsController.updateStockThreshold);
 
 /**
  * PUT /api/admin/inventory/:variantId

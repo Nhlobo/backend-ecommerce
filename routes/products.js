@@ -14,6 +14,12 @@ const { validateProductPrice } = require('../middleware/serverValidation');
 // =====================================================
 
 /**
+ * GET /api/products/search
+ * Search products with full-text search (must be before /:id)
+ */
+router.get('/search', productsController.searchProducts);
+
+/**
  * GET /api/products
  * List all products with filtering, pagination, and sorting
  */

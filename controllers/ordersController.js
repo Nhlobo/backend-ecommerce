@@ -4,6 +4,7 @@
  */
 
 const { query, transaction } = require('../db/connection');
+const { sendOrderConfirmation } = require('../services/emailService');
 
 /**
  * Generate unique order number
@@ -104,7 +105,7 @@ const createOrder = async (req, res) => {
 
         // Get user details for legacy fields
         const userResult = await query(
-            `SELECT email, name FROM users WHERE id = $1`,
+            `SELECT email, name, email_verified FROM users WHERE id = $1`,
             [userId]
         );
 
@@ -116,6 +117,14 @@ const createOrder = async (req, res) => {
         }
 
         const user = userResult.rows[0];
+
+        // Check if email is verified
+        if (!user.email_verified) {
+            return res.status(403).json({
+                success: false,
+                message: 'Please verify your email address before placing an order'
+            });
+        }
 
         // Create order in transaction
         const result = await transaction(async (client) => {
@@ -190,6 +199,11 @@ const createOrder = async (req, res) => {
             );
 
             return { order, orderItems };
+        });
+
+        // Send order confirmation email (non-blocking)
+        sendOrderConfirmation(result.order, user).catch(error => {
+            console.error('Failed to send order confirmation email:', error);
         });
 
         res.status(201).json({
