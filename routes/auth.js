@@ -39,4 +39,16 @@ router.post('/forgot-password', authLimiter, customerAuthController.forgotPasswo
  */
 router.post('/reset-password', authLimiter, validateResetPassword, customerAuthController.resetPassword);
 
+/**
+ * POST /api/auth/verify-email
+ * Verify email with token
+ */
+router.post('/verify-email', authLimiter, customerAuthController.verifyEmail);
+
+/**
+ * POST /api/auth/resend-verification
+ * Resend verification email
+ */
+router.post('/resend-verification', authLimiter, customerAuthController.resendVerification);
+
 module.exports = router;

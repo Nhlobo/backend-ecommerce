@@ -28,6 +28,8 @@ const ordersRoutes = require('./routes/orders');
 const paymentsRoutes = require('./routes/payments');
 const discountsRoutes = require('./routes/discounts');
 const returnsRoutes = require('./routes/returns');
+const reviewsRoutes = require('./routes/reviews');
+const newsletterRoutes = require('./routes/newsletter');
 const adminRoutes = require('./routes/admin');
 const adminRoutesLegacy = require('./routes/adminRoutes');
 const publicRoutes = require('./routes/publicRoutes');
@@ -138,6 +140,12 @@ app.use('/api/discounts', discountsRoutes);
 
 // Returns routes
 app.use('/api/returns', returnsRoutes);
+
+// Reviews routes
+app.use('/api/reviews', reviewsRoutes);
+
+// Newsletter routes
+app.use('/api/newsletter', newsletterRoutes);
 
 // Admin routes
 app.use('/api/admin', adminRoutes);

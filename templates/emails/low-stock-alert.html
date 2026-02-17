@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Low Stock Alert</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
+        <tr>
+            <td align="center">
+                <table width="700" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #ff6b6b; padding: 30px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px;">⚠️ Low Stock Alert</h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <h2 style="color: #2c3e50; margin-top: 0;">Inventory Alert - {{date}}</h2>
+                            
+                            <p style="color: #555; font-size: 16px; line-height: 1.6;">
+                                The following {{productCount}} product(s) are running low on stock and may need reordering:
+                            </p>
+                            
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background-color: #f8f9fa;">
+                                        <th style="padding: 12px; border: 1px solid #ddd; text-align: left; color: #2c3e50;">Product Name</th>
+                                        <th style="padding: 12px; border: 1px solid #ddd; text-align: left; color: #2c3e50;">SKU</th>
+                                        <th style="padding: 12px; border: 1px solid #ddd; text-align: center; color: #2c3e50;">Current Stock</th>
+                                        <th style="padding: 12px; border: 1px solid #ddd; text-align: center; color: #2c3e50;">Threshold</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{productList}}
+                                </tbody>
+                            </table>
+                            
+                            <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+                                <p style="margin: 0; color: #856404; font-size: 14px;">
+                                    <strong>Action Required:</strong> Please review and reorder these products to avoid stockouts.
+                                </p>
+                            </div>
+                            
+                            <div style="text-align: center; margin: 30px 0;">
+                                <a href="{{adminUrl}}/inventory" 
+                                   style="background-color: #4CAF50; color: white; padding: 15px 40px; 
+                                          text-decoration: none; border-radius: 5px; display: inline-block; 
+                                          font-size: 16px; font-weight: bold;">
+                                    Manage Inventory
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f8f9fa; padding: 30px; text-align: center;">
+                            <p style="color: #777; font-size: 14px; margin: 10px 0;">
+                                This is an automated alert from your inventory management system.
+                            </p>
+                            <p style="color: #999; font-size: 12px; margin: 10px 0;">
+                                © 2026 Premium Hair Wigs & Extensions Pty (Ltd). All rights reserved.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
