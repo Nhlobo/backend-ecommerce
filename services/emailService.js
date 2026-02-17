@@ -71,13 +71,16 @@ const loadTemplate = async (templateName, variables) => {
 
 /**
  * Generate plain text version from HTML
+ * This is only used for email plain text fallback, not for sanitizing user input
  */
 const htmlToPlainText = (html) => {
+    // This is a simple HTML to plain text converter for email fallback
+    // NOT for sanitizing user input - all user input must be sanitized before being stored
     return html
-        .replace(/<style[^>]*>.*?<\/style>/gi, '')
-        .replace(/<script[^>]*>.*?<\/script>/gi, '')
-        .replace(/<[^>]+>/g, '')
-        .replace(/\s+/g, ' ')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove style tags and content
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove script tags and content
+        .replace(/<[^>]+>/g, '') // Remove all HTML tags
+        .replace(/\s+/g, ' ') // Normalize whitespace
         .trim();
 };
 
