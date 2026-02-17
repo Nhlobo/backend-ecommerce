@@ -106,7 +106,7 @@ const getCart = async (req, res) => {
                 p.id as product_id,
                 p.name,
                 p.description,
-                p.category,
+                COALESCE(c.name, p.category) as category,
                 pv.price,
                 pv.sale_price,
                 pv.stock,
@@ -126,6 +126,7 @@ const getCart = async (req, res) => {
             FROM cart_items ci
             JOIN product_variants pv ON ci.variant_id = pv.id
             JOIN products p ON pv.product_id = p.id
+            LEFT JOIN categories c ON p.category_id = c.id
             WHERE ci.cart_id = $1 AND p.active = true
             ORDER BY ci.added_at DESC`,
             [cart.id]
