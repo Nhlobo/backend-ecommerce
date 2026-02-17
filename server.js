@@ -8,10 +8,12 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 // Import middleware
-const { apiLimiter, loginLimiter, checkLoginAttempts } = require('./middleware/rateLimiter');
+const { apiLimiter, sanitizeInput, detectSuspiciousActivity } = require('./middleware/security');
+const { loginLimiter, checkLoginAttempts } = require('./middleware/rateLimiter');
 const { authenticateAdmin } = require('./middleware/auth');
 const { validateLogin } = require('./middleware/validator');
 
@@ -19,7 +21,15 @@ const { validateLogin } = require('./middleware/validator');
 const authController = require('./controllers/authController');
 
 // Import routes
-const adminRoutes = require('./routes/adminRoutes');
+const customerAuthRoutes = require('./routes/auth');
+const productsRoutes = require('./routes/products');
+const cartRoutes = require('./routes/cart');
+const ordersRoutes = require('./routes/orders');
+const paymentsRoutes = require('./routes/payments');
+const discountsRoutes = require('./routes/discounts');
+const returnsRoutes = require('./routes/returns');
+const adminRoutes = require('./routes/admin');
+const adminRoutesLegacy = require('./routes/adminRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 
 // Initialize Express app
@@ -77,8 +87,17 @@ if (process.env.NODE_ENV !== 'production') {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Cookie parser
+app.use(cookieParser());
+
 // Apply rate limiting to all API routes
 app.use('/api', apiLimiter);
+
+// Apply input sanitization
+app.use(sanitizeInput);
+
+// Apply suspicious activity detection
+app.use(detectSuspiciousActivity);
 
 // =====================================================
 // API ROUTES
@@ -93,17 +112,41 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Authentication routes
+// Customer authentication routes
+app.use('/api/auth', customerAuthRoutes);
+
+// Admin authentication routes (legacy)
 app.post('/api/admin/login', loginLimiter, checkLoginAttempts, validateLogin, authController.login);
 app.post('/api/admin/logout', authenticateAdmin, authController.logout);
 app.get('/api/admin/me', authenticateAdmin, authController.getCurrentAdmin);
 app.post('/api/admin/change-password', authenticateAdmin, authController.changePassword);
 
-// Public/Customer routes (non-authenticated)
+// Product routes
+app.use('/api/products', productsRoutes);
+
+// Cart routes
+app.use('/api/cart', cartRoutes);
+
+// Order routes
+app.use('/api/orders', ordersRoutes);
+
+// Payment routes
+app.use('/api/payments', paymentsRoutes);
+
+// Discount routes
+app.use('/api/discounts', discountsRoutes);
+
+// Returns routes
+app.use('/api/returns', returnsRoutes);
+
+// Admin routes
+app.use('/api/admin', adminRoutes);
+
+// Public/Customer routes (legacy - non-authenticated)
 app.use('/api', publicRoutes);
 
-// Admin routes (protected)
-app.use('/api/admin', authenticateAdmin, adminRoutes);
+// Admin routes (legacy - protected)
+app.use('/api/admin', authenticateAdmin, adminRoutesLegacy);
 
 // =====================================================
 // ERROR HANDLING

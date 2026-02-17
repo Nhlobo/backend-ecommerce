@@ -1,14 +1,25 @@
 -- Premium Hair Wigs & Extensions E-commerce Database Schema
--- PostgreSQL Database for Admin Dashboard
+-- PostgreSQL Database for Admin Dashboard and Customer Platform
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =====================================================
 -- ADMIN & AUTHENTICATION TABLES
 -- =====================================================
 
--- Admin Users Table
+-- Admin Users Table (separate from customer users)
+CREATE TABLE IF NOT EXISTS admins (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'staff', -- 'staff' or 'super_admin'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Legacy admin_users table for backward compatibility
 CREATE TABLE IF NOT EXISTS admin_users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -42,10 +53,20 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 );
 
 -- =====================================================
--- CUSTOMER TABLES
+-- CUSTOMER TABLES  
 -- =====================================================
 
--- Customers Table
+-- Users Table (Customer accounts)
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Legacy Customers Table (for backward compatibility)
 CREATE TABLE IF NOT EXISTS customers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -58,7 +79,22 @@ CREATE TABLE IF NOT EXISTS customers (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Customer Addresses Table
+-- Addresses Table (Customer addresses)
+CREATE TABLE IF NOT EXISTS addresses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    line1 VARCHAR(255) NOT NULL,
+    line2 VARCHAR(255),
+    city VARCHAR(100) NOT NULL,
+    province VARCHAR(100) NOT NULL,
+    postal_code VARCHAR(10) NOT NULL,
+    country VARCHAR(100) DEFAULT 'South Africa',
+    is_default BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Legacy Customer Addresses Table (for backward compatibility)
 CREATE TABLE IF NOT EXISTS customer_addresses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
@@ -75,14 +111,30 @@ CREATE TABLE IF NOT EXISTS customer_addresses (
 -- PRODUCT TABLES
 -- =====================================================
 
+-- Categories Table
+CREATE TABLE IF NOT EXISTS categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Products Table
 CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
     description TEXT,
-    category VARCHAR(50) NOT NULL,
-    base_price DECIMAL(10, 2) NOT NULL,
-    price_incl_vat DECIMAL(10, 2) NOT NULL,
+    category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Legacy fields for backward compatibility
+    category VARCHAR(50),
+    base_price DECIMAL(10, 2),
+    price_incl_vat DECIMAL(10, 2),
     stock_quantity INTEGER DEFAULT 0,
     low_stock_threshold INTEGER DEFAULT 10,
     sku VARCHAR(100) UNIQUE,
@@ -90,21 +142,26 @@ CREATE TABLE IF NOT EXISTS products (
     is_featured BOOLEAN DEFAULT false,
     on_sale BOOLEAN DEFAULT false,
     sale_price DECIMAL(10, 2),
-    image_url TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    image_url TEXT
 );
 
--- Product Variants Table (for different colors, lengths, etc.)
+-- Product Variants Table (with texture, length, color)
 CREATE TABLE IF NOT EXISTS product_variants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-    variant_name VARCHAR(100) NOT NULL,
-    variant_value VARCHAR(100) NOT NULL,
+    sku VARCHAR(100) UNIQUE NOT NULL,
+    texture VARCHAR(100),
+    length VARCHAR(50),
+    color VARCHAR(100),
+    price DECIMAL(10, 2) NOT NULL,
+    stock INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Legacy fields
+    variant_name VARCHAR(100),
+    variant_value VARCHAR(100),
     price_adjustment DECIMAL(10, 2) DEFAULT 0,
-    stock_quantity INTEGER DEFAULT 0,
-    sku VARCHAR(100) UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    stock_quantity INTEGER DEFAULT 0
 );
 
 -- Wishlist Table
@@ -117,68 +174,87 @@ CREATE TABLE IF NOT EXISTS wishlist (
 );
 
 -- =====================================================
+-- CART TABLES
+-- =====================================================
+
+-- Carts Table (for both logged-in users and guest sessions)
+CREATE TABLE IF NOT EXISTS carts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    session_id VARCHAR(255) UNIQUE, -- For guest users
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Cart Items Table
+CREATE TABLE IF NOT EXISTS cart_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cart_id UUID REFERENCES carts(id) ON DELETE CASCADE,
+    variant_id UUID REFERENCES product_variants(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =====================================================
 -- ORDER TABLES
 -- =====================================================
 
 -- Orders Table
 CREATE TABLE IF NOT EXISTS orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     order_number VARCHAR(50) UNIQUE NOT NULL,
-    customer_id UUID REFERENCES customers(id),
-    customer_email VARCHAR(255) NOT NULL,
-    customer_name VARCHAR(255) NOT NULL,
-    customer_phone VARCHAR(20),
-    
-    -- Pricing
+    status VARCHAR(50) DEFAULT 'pending', -- pending, processing, shipped, delivered, cancelled
     subtotal DECIMAL(10, 2) NOT NULL,
-    vat_amount DECIMAL(10, 2) NOT NULL,
     shipping_cost DECIMAL(10, 2) DEFAULT 0,
+    tax DECIMAL(10, 2) DEFAULT 0,
+    total DECIMAL(10, 2) NOT NULL,
+    shipping_address_id UUID REFERENCES addresses(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Legacy fields for backward compatibility
+    customer_id UUID REFERENCES customers(id),
+    customer_email VARCHAR(255),
+    customer_name VARCHAR(255),
+    customer_phone VARCHAR(20),
+    vat_amount DECIMAL(10, 2),
     discount_amount DECIMAL(10, 2) DEFAULT 0,
-    total_amount DECIMAL(10, 2) NOT NULL,
-    
-    -- Shipping Address
-    shipping_address_line1 VARCHAR(255) NOT NULL,
+    total_amount DECIMAL(10, 2),
+    shipping_address_line1 VARCHAR(255),
     shipping_address_line2 VARCHAR(255),
-    shipping_city VARCHAR(100) NOT NULL,
-    shipping_province VARCHAR(100) NOT NULL,
-    shipping_postal_code VARCHAR(10) NOT NULL,
-    
-    -- Order Status
-    status VARCHAR(50) DEFAULT 'pending',
+    shipping_city VARCHAR(100),
+    shipping_province VARCHAR(100),
+    shipping_postal_code VARCHAR(10),
     payment_status VARCHAR(50) DEFAULT 'pending',
     fulfillment_status VARCHAR(50) DEFAULT 'unfulfilled',
-    
-    -- Tracking
     tracking_number VARCHAR(100),
     carrier VARCHAR(100),
-    
-    -- Timestamps
-    placed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    placed_at TIMESTAMP,
     paid_at TIMESTAMP,
     shipped_at TIMESTAMP,
     delivered_at TIMESTAMP,
     cancelled_at TIMESTAMP,
-    
-    -- Notes
     customer_notes TEXT,
-    admin_notes TEXT,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    admin_notes TEXT
 );
 
 -- Order Items Table
 CREATE TABLE IF NOT EXISTS order_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-    product_id UUID REFERENCES products(id),
+    variant_id UUID REFERENCES product_variants(id) ON DELETE SET NULL,
     product_name VARCHAR(255) NOT NULL,
-    product_sku VARCHAR(100),
-    variant_details TEXT,
+    variant_details JSONB,
     quantity INTEGER NOT NULL,
-    unit_price DECIMAL(10, 2) NOT NULL,
-    total_price DECIMAL(10, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    price DECIMAL(10, 2) NOT NULL,
+    subtotal DECIMAL(10, 2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Legacy fields
+    product_id UUID REFERENCES products(id),
+    product_sku VARCHAR(100),
+    unit_price DECIMAL(10, 2),
+    total_price DECIMAL(10, 2)
 );
 
 -- =====================================================
@@ -189,39 +265,46 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE TABLE IF NOT EXISTS payments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-    payment_method VARCHAR(50) NOT NULL,
-    payment_gateway VARCHAR(50),
-    
-    -- PayFast specific fields
     payfast_payment_id VARCHAR(100),
-    payfast_transaction_id VARCHAR(100),
-    
     amount DECIMAL(10, 2) NOT NULL,
-    status VARCHAR(50) DEFAULT 'pending',
-    
-    -- Payment details
+    status VARCHAR(50) DEFAULT 'pending', -- pending, completed, failed, refunded
+    payment_method VARCHAR(50),
+    transaction_id VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Legacy fields
+    payment_gateway VARCHAR(50),
+    payfast_transaction_id VARCHAR(100),
     card_last_four VARCHAR(4),
     card_type VARCHAR(50),
-    
-    -- Timestamps
     authorized_at TIMESTAMP,
     captured_at TIMESTAMP,
     failed_at TIMESTAMP,
     refunded_at TIMESTAMP,
-    
-    -- Additional info
     failure_reason TEXT,
-    gateway_response TEXT,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    gateway_response TEXT
 );
 
 -- =====================================================
 -- DISCOUNT & PROMOTION TABLES
 -- =====================================================
 
--- Discount Codes Table
+-- Discounts Table
+CREATE TABLE IF NOT EXISTS discounts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code VARCHAR(50) UNIQUE NOT NULL,
+    type VARCHAR(20) NOT NULL, -- 'percentage' or 'fixed'
+    value DECIMAL(10, 2) NOT NULL,
+    min_purchase DECIMAL(10, 2) DEFAULT 0,
+    usage_limit INTEGER,
+    used_count INTEGER DEFAULT 0,
+    expires_at TIMESTAMP,
+    active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Legacy Discount Codes Table
 CREATE TABLE IF NOT EXISTS discount_codes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     code VARCHAR(50) UNIQUE NOT NULL,
@@ -256,35 +339,25 @@ CREATE TABLE IF NOT EXISTS discount_usage (
 -- Returns Table
 CREATE TABLE IF NOT EXISTS returns (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    return_number VARCHAR(50) UNIQUE NOT NULL,
-    order_id UUID REFERENCES orders(id),
-    customer_id UUID REFERENCES customers(id),
-    
-    -- Return Details
+    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
     reason VARCHAR(255) NOT NULL,
-    detailed_reason TEXT,
-    return_method VARCHAR(50), -- 'courier', 'drop-off'
-    
-    -- Status
-    status VARCHAR(50) DEFAULT 'requested',
-    
-    -- Inspection
-    inspection_notes TEXT,
-    inspection_result VARCHAR(50), -- 'approved', 'rejected', 'partial'
-    
-    -- Refund
+    status VARCHAR(50) DEFAULT 'requested', -- requested, approved, rejected, refunded
     refund_amount DECIMAL(10, 2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Legacy fields
+    return_number VARCHAR(50) UNIQUE,
+    customer_id UUID REFERENCES customers(id),
+    detailed_reason TEXT,
+    return_method VARCHAR(50),
+    inspection_notes TEXT,
+    inspection_result VARCHAR(50),
     refund_method VARCHAR(50),
-    
-    -- Timestamps
-    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    requested_at TIMESTAMP,
     approved_at TIMESTAMP,
     rejected_at TIMESTAMP,
     received_at TIMESTAMP,
-    refunded_at TIMESTAMP,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    refunded_at TIMESTAMP
 );
 
 -- Return Items Table
@@ -380,7 +453,32 @@ CREATE TABLE IF NOT EXISTS policy_documents (
 -- SECURITY & AUDIT TABLES
 -- =====================================================
 
--- Activity Logs Table
+-- Admin Logs Table (Admin activity tracking)
+CREATE TABLE IF NOT EXISTS admin_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    admin_id UUID REFERENCES admins(id) ON DELETE SET NULL,
+    action VARCHAR(100) NOT NULL,
+    resource_type VARCHAR(50), -- 'order', 'product', 'customer', etc.
+    resource_id UUID,
+    details JSONB,
+    ip_address VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Security Logs Table (Security events)
+CREATE TABLE IF NOT EXISTS security_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_type VARCHAR(20), -- 'admin', 'customer', 'guest'
+    user_id UUID,
+    event_type VARCHAR(50) NOT NULL, -- 'failed_login', 'suspicious_activity', etc.
+    severity VARCHAR(20) NOT NULL, -- 'low', 'medium', 'high', 'critical'
+    ip_address VARCHAR(50),
+    user_agent TEXT,
+    details JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Legacy Activity Logs Table (for backward compatibility)
 CREATE TABLE IF NOT EXISTS activity_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     admin_id UUID REFERENCES admin_users(id),
@@ -394,7 +492,7 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Security Events Table
+-- Legacy Security Events Table (for backward compatibility)
 CREATE TABLE IF NOT EXISTS security_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     event_type VARCHAR(50) NOT NULL, -- 'failed_login', 'suspicious_activity', etc.
@@ -470,36 +568,60 @@ CREATE TABLE IF NOT EXISTS newsletter_subscribers (
 -- =====================================================
 
 -- Admin and Auth Indexes
+CREATE INDEX IF NOT EXISTS idx_admins_username ON admins(username);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin_id ON admin_sessions(admin_id);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_token ON admin_sessions(token);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_email ON login_attempts(email);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
 
--- Customer Indexes
+-- User Indexes
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_addresses_user_id ON addresses(user_id);
+
+-- Customer Indexes (legacy)
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
 CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer_id ON customer_addresses(customer_id);
 
+-- Category Indexes
+CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
+
 -- Product Indexes
+CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug);
+CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id);
+CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_is_active ON products(is_active);
 CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_variants_sku ON product_variants(sku);
 CREATE INDEX IF NOT EXISTS idx_wishlist_customer_id ON wishlist(customer_id);
 CREATE INDEX IF NOT EXISTS idx_wishlist_product_id ON wishlist(product_id);
 
+-- Cart Indexes
+CREATE INDEX IF NOT EXISTS idx_carts_user_id ON carts(user_id);
+CREATE INDEX IF NOT EXISTS idx_carts_session_id ON carts(session_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_cart_id ON cart_items(cart_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_variant_id ON cart_items(variant_id);
+
 -- Order Indexes
+CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status);
 CREATE INDEX IF NOT EXISTS idx_orders_placed_at ON orders(placed_at);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_variant_id ON order_items(variant_id);
 
 -- Payment Indexes
 CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+CREATE INDEX IF NOT EXISTS idx_payments_payfast_payment_id ON payments(payfast_payment_id);
 
 -- Discount Indexes
+CREATE INDEX IF NOT EXISTS idx_discounts_code ON discounts(code);
+CREATE INDEX IF NOT EXISTS idx_discounts_active ON discounts(active);
 CREATE INDEX IF NOT EXISTS idx_discount_codes_code ON discount_codes(code);
 CREATE INDEX IF NOT EXISTS idx_discount_usage_discount_code_id ON discount_usage(discount_code_id);
 
@@ -515,6 +637,13 @@ CREATE INDEX IF NOT EXISTS idx_data_access_logs_admin_id ON data_access_logs(adm
 CREATE INDEX IF NOT EXISTS idx_data_access_logs_customer_id ON data_access_logs(customer_id);
 
 -- Security Indexes
+CREATE INDEX IF NOT EXISTS idx_admin_logs_admin_id ON admin_logs(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_logs_resource_type ON admin_logs(resource_type);
+CREATE INDEX IF NOT EXISTS idx_admin_logs_created_at ON admin_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_security_logs_user_type ON security_logs(user_type);
+CREATE INDEX IF NOT EXISTS idx_security_logs_event_type ON security_logs(event_type);
+CREATE INDEX IF NOT EXISTS idx_security_logs_severity ON security_logs(severity);
+CREATE INDEX IF NOT EXISTS idx_security_logs_created_at ON security_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_admin_id ON activity_logs(admin_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_security_events_severity ON security_events(severity);

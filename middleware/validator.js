@@ -41,6 +41,43 @@ const validateLogin = [
 ];
 
 /**
+ * Registration validation rules
+ */
+const validateRegister = [
+    body('name')
+        .trim()
+        .isLength({ min: 2, max: 255 })
+        .withMessage('Name must be between 2 and 255 characters'),
+    body('email')
+        .trim()
+        .isEmail()
+        .normalizeEmail()
+        .withMessage('Valid email is required'),
+    body('password')
+        .isLength({ min: 8 })
+        .withMessage('Password must be at least 8 characters')
+        .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+        .withMessage('Password must contain uppercase, lowercase, number, and special character'),
+    handleValidationErrors
+];
+
+/**
+ * Reset password validation rules
+ */
+const validateResetPassword = [
+    body('token')
+        .trim()
+        .isLength({ min: 64, max: 64 })
+        .withMessage('Invalid reset token'),
+    body('password')
+        .isLength({ min: 8 })
+        .withMessage('Password must be at least 8 characters')
+        .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+        .withMessage('Password must contain uppercase, lowercase, number, and special character'),
+    handleValidationErrors
+];
+
+/**
  * Product validation rules
  */
 const validateProduct = [
@@ -153,6 +190,8 @@ const validatePagination = [
 module.exports = {
     handleValidationErrors,
     validateLogin,
+    validateRegister,
+    validateResetPassword,
     validateProduct,
     validateOrderUpdate,
     validateDiscountCode,

@@ -3,7 +3,7 @@
  * Handles admin login, logout, and session management
  */
 
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { query, transaction } = require('../db/connection');
 const { logLoginAttempt } = require('../middleware/rateLimiter');
