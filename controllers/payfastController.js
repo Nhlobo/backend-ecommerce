@@ -233,7 +233,8 @@ const payfastNotify = async (req, res) => {
     } catch (error) {
         console.error('PayFast ITN error:', error);
         // Still respond with 200 to prevent PayFast retries on server errors
-        res.status(200).send('Error logged');
+        // Log error with details for debugging
+        res.status(200).send('ITN processing error logged - please contact support');
     }
 };
 

@@ -4,7 +4,7 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
-const { query } = require('../db/connection');
+const { query, transaction } = require('../db/connection');
 
 /**
  * Helper function to get or create cart
@@ -693,9 +693,6 @@ const mergeCart = async (req, res) => {
         
         const guestCartId = guestCartResult.rows[0].id;
         
-        // Get or create user cart
-        const { cartId: userCartId } = await getOrCreateCart(userId, null);
-        
         // Get guest cart items
         const guestItemsResult = await query(
             `SELECT variant_id, quantity 
@@ -717,55 +714,77 @@ const mergeCart = async (req, res) => {
             });
         }
         
-        // Merge items
-        let itemsMerged = 0;
-        
-        for (const guestItem of guestItemsResult.rows) {
-            // Check if item already exists in user cart
-            const existingItemResult = await query(
-                `SELECT id, quantity FROM cart_items 
-                 WHERE cart_id = $1 AND variant_id = $2`,
-                [userCartId, guestItem.variant_id]
+        // Use transaction for atomicity and better performance
+        const result = await transaction(async (client) => {
+            // Get or create user cart within transaction
+            let userCartResult = await client.query(
+                'SELECT id FROM carts WHERE user_id = $1',
+                [userId]
             );
             
-            if (existingItemResult.rows.length > 0) {
-                // Update quantity of existing item
-                const existingItem = existingItemResult.rows[0];
-                const newQuantity = existingItem.quantity + guestItem.quantity;
-                
-                await query(
-                    `UPDATE cart_items 
-                     SET quantity = $1, updated_at = CURRENT_TIMESTAMP 
-                     WHERE id = $2`,
-                    [newQuantity, existingItem.id]
-                );
-            } else {
-                // Add new item to user cart
-                await query(
-                    `INSERT INTO cart_items (cart_id, variant_id, quantity) 
-                     VALUES ($1, $2, $3)`,
-                    [userCartId, guestItem.variant_id, guestItem.quantity]
+            let userCartId;
+            if (userCartResult.rows.length === 0) {
+                userCartResult = await client.query(
+                    'INSERT INTO carts (user_id) VALUES ($1) RETURNING id',
+                    [userId]
                 );
             }
+            // Note: getOrCreateCart returns { cartId, sessionId }
+            // We only need cartId here, sessionId is for guest carts
+            userCartId = userCartResult.rows[0].id;
             
-            itemsMerged++;
-        }
-        
-        // Delete guest cart and items
-        await query('DELETE FROM cart_items WHERE cart_id = $1', [guestCartId]);
-        await query('DELETE FROM carts WHERE id = $1', [guestCartId]);
-        
-        // Update user cart timestamp
-        await query(
-            'UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-            [userCartId]
-        );
+            let itemsMerged = 0;
+            
+            // Process all items in a single transaction for atomicity
+            for (const guestItem of guestItemsResult.rows) {
+                // Check if item already exists in user cart
+                const existingItemResult = await client.query(
+                    `SELECT id, quantity FROM cart_items 
+                     WHERE cart_id = $1 AND variant_id = $2`,
+                    [userCartId, guestItem.variant_id]
+                );
+                
+                if (existingItemResult.rows.length > 0) {
+                    // Update quantity of existing item
+                    const existingItem = existingItemResult.rows[0];
+                    const newQuantity = existingItem.quantity + guestItem.quantity;
+                    
+                    await client.query(
+                        `UPDATE cart_items 
+                         SET quantity = $1, updated_at = CURRENT_TIMESTAMP 
+                         WHERE id = $2`,
+                        [newQuantity, existingItem.id]
+                    );
+                } else {
+                    // Add new item to user cart
+                    await client.query(
+                        `INSERT INTO cart_items (cart_id, variant_id, quantity) 
+                         VALUES ($1, $2, $3)`,
+                        [userCartId, guestItem.variant_id, guestItem.quantity]
+                    );
+                }
+                
+                itemsMerged++;
+            }
+            
+            // Delete guest cart and items
+            await client.query('DELETE FROM cart_items WHERE cart_id = $1', [guestCartId]);
+            await client.query('DELETE FROM carts WHERE id = $1', [guestCartId]);
+            
+            // Update user cart timestamp
+            await client.query(
+                'UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+                [userCartId]
+            );
+            
+            return itemsMerged;
+        });
         
         res.status(200).json({
             success: true,
-            message: `Successfully merged ${itemsMerged} item(s) from guest cart`,
+            message: `Successfully merged ${result} item(s) from guest cart`,
             data: {
-                items_merged: itemsMerged
+                items_merged: result
             }
         });
     } catch (error) {
