@@ -651,11 +651,138 @@ const validateCart = async (req, res) => {
     }
 };
 
+/**
+ * Merge guest cart into user cart on login
+ * POST /api/cart/merge
+ */
+const mergeCart = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        const { session_id } = req.body;
+        
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+        
+        if (!session_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest session ID required'
+            });
+        }
+        
+        // Get guest cart
+        const guestCartResult = await query(
+            'SELECT id FROM carts WHERE session_id = $1',
+            [session_id]
+        );
+        
+        if (guestCartResult.rows.length === 0) {
+            // No guest cart to merge
+            return res.status(200).json({
+                success: true,
+                message: 'No guest cart items to merge',
+                data: {
+                    items_merged: 0
+                }
+            });
+        }
+        
+        const guestCartId = guestCartResult.rows[0].id;
+        
+        // Get or create user cart
+        const { cartId: userCartId } = await getOrCreateCart(userId, null);
+        
+        // Get guest cart items
+        const guestItemsResult = await query(
+            `SELECT variant_id, quantity 
+             FROM cart_items 
+             WHERE cart_id = $1`,
+            [guestCartId]
+        );
+        
+        if (guestItemsResult.rows.length === 0) {
+            // Delete empty guest cart
+            await query('DELETE FROM carts WHERE id = $1', [guestCartId]);
+            
+            return res.status(200).json({
+                success: true,
+                message: 'No guest cart items to merge',
+                data: {
+                    items_merged: 0
+                }
+            });
+        }
+        
+        // Merge items
+        let itemsMerged = 0;
+        
+        for (const guestItem of guestItemsResult.rows) {
+            // Check if item already exists in user cart
+            const existingItemResult = await query(
+                `SELECT id, quantity FROM cart_items 
+                 WHERE cart_id = $1 AND variant_id = $2`,
+                [userCartId, guestItem.variant_id]
+            );
+            
+            if (existingItemResult.rows.length > 0) {
+                // Update quantity of existing item
+                const existingItem = existingItemResult.rows[0];
+                const newQuantity = existingItem.quantity + guestItem.quantity;
+                
+                await query(
+                    `UPDATE cart_items 
+                     SET quantity = $1, updated_at = CURRENT_TIMESTAMP 
+                     WHERE id = $2`,
+                    [newQuantity, existingItem.id]
+                );
+            } else {
+                // Add new item to user cart
+                await query(
+                    `INSERT INTO cart_items (cart_id, variant_id, quantity) 
+                     VALUES ($1, $2, $3)`,
+                    [userCartId, guestItem.variant_id, guestItem.quantity]
+                );
+            }
+            
+            itemsMerged++;
+        }
+        
+        // Delete guest cart and items
+        await query('DELETE FROM cart_items WHERE cart_id = $1', [guestCartId]);
+        await query('DELETE FROM carts WHERE id = $1', [guestCartId]);
+        
+        // Update user cart timestamp
+        await query(
+            'UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+            [userCartId]
+        );
+        
+        res.status(200).json({
+            success: true,
+            message: `Successfully merged ${itemsMerged} item(s) from guest cart`,
+            data: {
+                items_merged: itemsMerged
+            }
+        });
+    } catch (error) {
+        console.error('Merge cart error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to merge cart'
+        });
+    }
+};
+
 module.exports = {
     getCart,
     addToCart,
     updateCartItem,
     removeCartItem,
     clearCart,
-    validateCart
+    validateCart,
+    mergeCart
 };

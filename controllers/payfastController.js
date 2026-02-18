@@ -1,10 +1,11 @@
 /**
  * PayFast Payment Controller
- * Handles PayFast payment gateway integration
+ * Handles PayFast payment gateway integration with enhanced security
  */
 
 const crypto = require('crypto');
 const { query, transaction } = require('../db/connection');
+const payfastService = require('../services/payfastService');
 
 /**
  * Generate MD5 signature for PayFast
@@ -66,51 +67,34 @@ const createPayment = async (req, res) => {
 
         const order = orderResult.rows[0];
 
-        // Check if order already has a payment
+        // Check if order already has a completed payment
         const existingPayment = await query(
-            'SELECT * FROM payments WHERE order_id = $1 AND status != $2',
-            [order_id, 'failed']
+            'SELECT * FROM payments WHERE order_id = $1 AND status = $2',
+            [order_id, 'completed']
         );
 
         if (existingPayment.rows.length > 0) {
             return res.status(400).json({
                 success: false,
-                message: 'Payment already exists for this order'
+                message: 'Payment already completed for this order'
             });
         }
 
-        // Generate unique payment ID
-        const paymentId = `${order.order_number}_${Date.now()}`;
+        // Generate payment data using service
+        const paymentData = payfastService.generatePaymentData(order);
 
-        // Prepare PayFast data
-        const paymentData = {
-            merchant_id: process.env.PAYFAST_MERCHANT_ID,
-            merchant_key: process.env.PAYFAST_MERCHANT_KEY,
-            return_url: `${process.env.FRONTEND_URL}/payment/success`,
-            cancel_url: `${process.env.FRONTEND_URL}/payment/cancel`,
-            notify_url: `${process.env.BACKEND_URL}/api/payments/payfast/notify`,
-            name_first: order.name || 'Customer',
-            email_address: order.email || 'customer@example.com',
-            m_payment_id: paymentId,
-            amount: order.total.toFixed(2),
-            item_name: `Order ${order.order_number}`,
-            item_description: `Payment for order ${order.order_number}`
-        };
-
-        // Generate signature
-        const signature = generateSignature(paymentData, process.env.PAYFAST_PASSPHRASE);
-        paymentData.signature = signature;
-
-        // Create payment record
+        // Create or update payment record
         await query(
-            `INSERT INTO payments (order_id, payfast_payment_id, amount, status, payment_method)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [order_id, paymentId, order.total, 'pending', 'payfast']
+            `INSERT INTO payments (order_id, amount, status, payment_method)
+             VALUES ($1, $2, 'pending', 'payfast')
+             ON CONFLICT (order_id) 
+             DO UPDATE SET status = 'pending', updated_at = CURRENT_TIMESTAMP`,
+            [order_id, order.total]
         );
 
         // Update order payment status
         await query(
-            'UPDATE orders SET payment_status = $1, updated_at = NOW() WHERE id = $2',
+            'UPDATE orders SET payment_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             ['pending', order_id]
         );
 
@@ -118,7 +102,7 @@ const createPayment = async (req, res) => {
             success: true,
             message: 'Payment created successfully',
             data: {
-                payfast_url: process.env.PAYFAST_URL,
+                payfast_url: payfastService.getPaymentUrl(),
                 payment_data: paymentData
             }
         });
@@ -139,18 +123,26 @@ const createPayment = async (req, res) => {
 const payfastNotify = async (req, res) => {
     try {
         const data = req.body;
+        
+        // Get source IP for validation
+        const sourceIp = req.headers['x-forwarded-for'] 
+            ? req.headers['x-forwarded-for'].split(',')[0].trim()
+            : req.connection.remoteAddress || req.socket.remoteAddress;
 
-        console.log('PayFast ITN received:', data);
+        console.log('PayFast ITN received from IP:', sourceIp);
+        console.log('PayFast ITN data:', data);
 
-        // Verify signature
-        const signature = data.signature;
-        delete data.signature;
+        // Verify ITN with enhanced security
+        const verification = await payfastService.verifyITN(data, sourceIp);
 
-        const calculatedSignature = generateSignature(data, process.env.PAYFAST_PASSPHRASE);
+        if (!verification.valid) {
+            console.error('PayFast ITN verification failed:', verification.errors);
+            return res.status(400).send('Verification failed');
+        }
 
-        if (signature !== calculatedSignature) {
-            console.error('Invalid PayFast signature');
-            return res.status(400).send('Invalid signature');
+        // Log any warnings
+        if (verification.warnings.length > 0) {
+            console.warn('PayFast ITN warnings:', verification.warnings);
         }
 
         // Extract payment details
@@ -160,22 +152,23 @@ const payfastNotify = async (req, res) => {
             payment_status,
             amount_gross,
             amount_fee,
-            amount_net
+            amount_net,
+            custom_str1 // order_id
         } = data;
 
-        // Find payment record
-        const paymentResult = await query(
-            'SELECT p.*, o.id as order_id FROM payments p JOIN orders o ON p.order_id = o.id WHERE p.payfast_payment_id = $1',
-            [m_payment_id]
+        const orderId = custom_str1;
+
+        // Check for duplicate processing (idempotency)
+        const existingPayment = await query(
+            `SELECT id, status FROM payments 
+             WHERE order_id = $1 AND payfast_payment_id = $2`,
+            [orderId, pf_payment_id]
         );
 
-        if (paymentResult.rows.length === 0) {
-            console.error('Payment not found:', m_payment_id);
-            return res.status(404).send('Payment not found');
+        if (existingPayment.rows.length > 0 && existingPayment.rows[0].status === 'completed') {
+            console.log('Payment already processed (idempotency check):', pf_payment_id);
+            return res.status(200).send('OK');
         }
-
-        const payment = paymentResult.rows[0];
-        const orderId = payment.order_id;
 
         // Process payment based on status
         if (payment_status === 'COMPLETE') {
@@ -183,59 +176,64 @@ const payfastNotify = async (req, res) => {
                 // Update payment status
                 await client.query(
                     `UPDATE payments 
-                     SET status = $1, transaction_id = $2, payment_method = $3, updated_at = NOW()
-                     WHERE id = $4`,
-                    ['completed', pf_payment_id, 'payfast', payment.id]
+                     SET status = 'completed', 
+                         payfast_payment_id = $1,
+                         transaction_id = $2, 
+                         payment_method = 'payfast',
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE order_id = $3 AND status = 'pending'`,
+                    [pf_payment_id, m_payment_id, orderId]
                 );
 
                 // Update order status
                 await client.query(
                     `UPDATE orders 
-                     SET status = $1, payment_status = $2, paid_at = NOW(), updated_at = NOW()
-                     WHERE id = $3`,
-                    ['processing', 'paid', orderId]
-                );
-
-                // Deduct inventory
-                const orderItems = await client.query(
-                    'SELECT variant_id, quantity FROM order_items WHERE order_id = $1',
+                     SET status = 'processing', 
+                         payment_status = 'paid', 
+                         paid_at = CURRENT_TIMESTAMP,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = $1`,
                     [orderId]
                 );
 
-                for (const item of orderItems.rows) {
-                    await client.query(
-                        'UPDATE product_variants SET stock = stock - $1, updated_at = NOW() WHERE id = $2',
-                        [item.quantity, item.variant_id]
-                    );
-                }
+                // Inventory should already be deducted during order creation
+                // No need to deduct again here
             });
 
-            console.log('Payment completed successfully:', m_payment_id);
+            console.log('Payment completed successfully:', pf_payment_id);
+            
+            // TODO: Send order confirmation email
+            // await emailService.sendOrderConfirmation(orderId);
         } else {
-            // Payment failed
+            // Payment failed or cancelled
             await query(
                 `UPDATE payments 
-                 SET status = $1, transaction_id = $2, updated_at = NOW()
-                 WHERE id = $3`,
-                ['failed', pf_payment_id, payment.id]
+                 SET status = 'failed', 
+                     payfast_payment_id = $1,
+                     transaction_id = $2,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE order_id = $3`,
+                [pf_payment_id, m_payment_id, orderId]
             );
 
             await query(
                 `UPDATE orders 
-                 SET payment_status = $1, updated_at = NOW()
-                 WHERE id = $2`,
-                ['failed', orderId]
+                 SET payment_status = 'failed',
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $1`,
+                [orderId]
             );
 
-            console.log('Payment failed:', m_payment_id);
+            console.log('Payment failed:', pf_payment_id, 'Status:', payment_status);
         }
 
-        // Respond with OK
+        // Respond with OK (PayFast expects 200 OK response)
         res.status(200).send('OK');
 
     } catch (error) {
         console.error('PayFast ITN error:', error);
-        res.status(500).send('Error processing notification');
+        // Still respond with 200 to prevent PayFast retries on server errors
+        res.status(200).send('Error logged');
     }
 };
 

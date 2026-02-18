@@ -48,4 +48,10 @@ router.delete('/', cartController.clearCart);
  */
 router.post('/validate', cartController.validateCart);
 
+/**
+ * POST /api/cart/merge
+ * Merge guest cart into authenticated user cart (requires authentication)
+ */
+router.post('/merge', authenticateToken, cartController.mergeCart);
+
 module.exports = router;
