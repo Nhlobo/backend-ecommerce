@@ -398,6 +398,74 @@ lsof -i :5000
 kill -9 <PID>
 ```
 
+## 📊 API Testing
+
+### Using cURL
+
+```bash
+# Health check
+curl http://localhost:5000/api/health
+
+# Get products
+curl http://localhost:5000/api/products
+
+# Admin login
+curl -X POST http://localhost:5000/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@premiumhairsa.co.za","password":"your-password"}'
+```
+
+### Using Postman
+
+1. Import the API endpoints from `API_ENDPOINTS.md`
+2. Set up environment variables for base URL and tokens
+3. Test each endpoint category systematically
+
+## 🔐 Production Checklist
+
+Before deploying to production, ensure:
+
+### Security
+- [ ] Change default admin password
+- [ ] Set strong JWT_SECRET and ADMIN_JWT_SECRET
+- [ ] Configure HTTPS (NODE_ENV=production)
+- [ ] Enable database SSL (DB_SSL=true)
+- [ ] Update CORS allowed origins (remove localhost)
+- [ ] Set secure PayFast credentials
+- [ ] Enable PayFast server verification (PAYFAST_VERIFY_SERVER=true)
+
+### PayFast Configuration
+- [ ] Switch PAYFAST_MODE to 'live'
+- [ ] Configure production merchant ID and key
+- [ ] Set PayFast passphrase
+- [ ] Update return/cancel URLs to production frontend
+- [ ] Verify notify URL is accessible from PayFast servers
+- [ ] Test webhook endpoint with PayFast sandbox first
+
+### Email Service
+- [ ] Configure SMTP or SendGrid/Mailgun credentials
+- [ ] Set FROM_EMAIL and FROM_NAME
+- [ ] Test order confirmation emails
+- [ ] Test password reset emails
+
+### Database
+- [ ] Run database migrations
+- [ ] Set up automated backups
+- [ ] Configure connection pooling
+- [ ] Enable query logging for debugging
+
+### Monitoring
+- [ ] Set up log aggregation (e.g., Papertrail, Loggly)
+- [ ] Monitor security_logs table
+- [ ] Set up uptime monitoring
+- [ ] Configure alerts for failed payments
+
+### Performance
+- [ ] Enable database indexes
+- [ ] Configure Redis for session storage (optional)
+- [ ] Set appropriate rate limits
+- [ ] Enable compression
+
 ## 📜 License
 
 PROPRIETARY - Premium Hair Wigs & Extensions Pty (Ltd)
