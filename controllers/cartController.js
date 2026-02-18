@@ -4,7 +4,7 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
-const { query } = require('../db/connection');
+const { query, transaction } = require('../db/connection');
 
 /**
  * Helper function to get or create cart
@@ -651,11 +651,157 @@ const validateCart = async (req, res) => {
     }
 };
 
+/**
+ * Merge guest cart into user cart on login
+ * POST /api/cart/merge
+ */
+const mergeCart = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        const { session_id } = req.body;
+        
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+        
+        if (!session_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest session ID required'
+            });
+        }
+        
+        // Get guest cart
+        const guestCartResult = await query(
+            'SELECT id FROM carts WHERE session_id = $1',
+            [session_id]
+        );
+        
+        if (guestCartResult.rows.length === 0) {
+            // No guest cart to merge
+            return res.status(200).json({
+                success: true,
+                message: 'No guest cart items to merge',
+                data: {
+                    items_merged: 0
+                }
+            });
+        }
+        
+        const guestCartId = guestCartResult.rows[0].id;
+        
+        // Get guest cart items
+        const guestItemsResult = await query(
+            `SELECT variant_id, quantity 
+             FROM cart_items 
+             WHERE cart_id = $1`,
+            [guestCartId]
+        );
+        
+        if (guestItemsResult.rows.length === 0) {
+            // Delete empty guest cart
+            await query('DELETE FROM carts WHERE id = $1', [guestCartId]);
+            
+            return res.status(200).json({
+                success: true,
+                message: 'No guest cart items to merge',
+                data: {
+                    items_merged: 0
+                }
+            });
+        }
+        
+        // Use transaction for atomicity and better performance
+        const result = await transaction(async (client) => {
+            // Get or create user cart within transaction
+            let userCartResult = await client.query(
+                'SELECT id FROM carts WHERE user_id = $1',
+                [userId]
+            );
+            
+            let userCartId;
+            if (userCartResult.rows.length === 0) {
+                userCartResult = await client.query(
+                    'INSERT INTO carts (user_id) VALUES ($1) RETURNING id',
+                    [userId]
+                );
+            }
+            // Note: getOrCreateCart returns { cartId, sessionId }
+            // We only need cartId here, sessionId is for guest carts
+            userCartId = userCartResult.rows[0].id;
+            
+            let itemsMerged = 0;
+            
+            // Process all items in a single transaction for atomicity
+            for (const guestItem of guestItemsResult.rows) {
+                // Check if item already exists in user cart
+                const existingItemResult = await client.query(
+                    `SELECT id, quantity FROM cart_items 
+                     WHERE cart_id = $1 AND variant_id = $2`,
+                    [userCartId, guestItem.variant_id]
+                );
+                
+                if (existingItemResult.rows.length > 0) {
+                    // Update quantity of existing item
+                    const existingItem = existingItemResult.rows[0];
+                    const newQuantity = existingItem.quantity + guestItem.quantity;
+                    
+                    await client.query(
+                        `UPDATE cart_items 
+                         SET quantity = $1, updated_at = CURRENT_TIMESTAMP 
+                         WHERE id = $2`,
+                        [newQuantity, existingItem.id]
+                    );
+                } else {
+                    // Add new item to user cart
+                    await client.query(
+                        `INSERT INTO cart_items (cart_id, variant_id, quantity) 
+                         VALUES ($1, $2, $3)`,
+                        [userCartId, guestItem.variant_id, guestItem.quantity]
+                    );
+                }
+                
+                itemsMerged++;
+            }
+            
+            // Delete guest cart and items
+            await client.query('DELETE FROM cart_items WHERE cart_id = $1', [guestCartId]);
+            await client.query('DELETE FROM carts WHERE id = $1', [guestCartId]);
+            
+            // Update user cart timestamp
+            await client.query(
+                'UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+                [userCartId]
+            );
+            
+            return itemsMerged;
+        });
+        
+        res.status(200).json({
+            success: true,
+            message: `Successfully merged ${result} item(s) from guest cart`,
+            data: {
+                items_merged: result
+            }
+        });
+    } catch (error) {
+        console.error('Merge cart error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to merge cart'
+        });
+    }
+};
+
 module.exports = {
     getCart,
     addToCart,
     updateCartItem,
     removeCartItem,
     clearCart,
-    validateCart
+    validateCart,
+    mergeCart
 };

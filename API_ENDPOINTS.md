@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document lists all 43 API endpoints available in the Premium Hair E-commerce Backend API.
+This document lists all 50+ API endpoints available in the Premium Hair E-commerce Backend API.
 
 **Base URL**: `http://localhost:3000/api` (development) or `https://your-domain.com/api` (production)
 
@@ -276,7 +276,159 @@ Get all product categories.
 
 ---
 
-## 5. Orders (2 endpoints)
+## 5. Shopping Cart (7 endpoints)
+
+### GET /api/cart
+Get current cart (guest or authenticated user).
+
+**Auth**: Optional (uses session_id header if not authenticated)
+
+**Headers**:
+- `x-session-id`: Session ID for guest users (optional)
+- `Authorization`: Bearer token for authenticated users (optional)
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "uuid",
+        "variant_id": "uuid",
+        "product_name": "Premium Lace Front Wig",
+        "variant_details": {
+          "texture": "Straight",
+          "length": "18 inches",
+          "color": "Natural Black"
+        },
+        "quantity": 2,
+        "price": 1725.00,
+        "subtotal": 3450.00,
+        "stock": 15,
+        "image_url": "..."
+      }
+    ],
+    "subtotal": 3450.00,
+    "total_items": 1,
+    "session_id": "uuid"
+  }
+}
+```
+
+### POST /api/cart/items
+Add item to cart.
+
+**Auth**: Optional (uses session_id header if not authenticated)
+
+**Body**:
+```json
+{
+  "variant_id": "uuid",
+  "quantity": 2
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Item added to cart",
+  "data": {
+    "items": [...],
+    "subtotal": 3450.00,
+    "total_items": 1
+  }
+}
+```
+
+### PUT /api/cart/items/:id
+Update cart item quantity.
+
+**Auth**: Optional (uses session_id header if not authenticated)
+
+**Body**:
+```json
+{
+  "quantity": 3
+}
+```
+
+**Response**: Returns updated cart
+
+### DELETE /api/cart/items/:id
+Remove item from cart.
+
+**Auth**: Optional (uses session_id header if not authenticated)
+
+**Response**: Returns updated cart
+
+### DELETE /api/cart
+Clear entire cart.
+
+**Auth**: Optional (uses session_id header if not authenticated)
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Cart cleared successfully",
+  "data": {
+    "items": [],
+    "subtotal": 0,
+    "total_items": 0
+  }
+}
+```
+
+### POST /api/cart/validate
+Server-side validation of cart items and stock.
+
+**Auth**: Optional (uses session_id header if not authenticated)
+
+**Response**:
+```json
+{
+  "success": true,
+  "validation": {
+    "valid": true,
+    "errors": [],
+    "warnings": []
+  },
+  "data": {
+    "items": [...],
+    "subtotal": 3450.00,
+    "total_items": 1
+  }
+}
+```
+
+### POST /api/cart/merge
+Merge guest cart into authenticated user cart (called after login).
+
+**Auth**: Customer JWT required
+
+**Body**:
+```json
+{
+  "session_id": "guest-session-uuid"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Successfully merged 3 item(s) from guest cart",
+  "data": {
+    "items_merged": 3
+  }
+}
+```
+
+---
+
+## 6. Orders (2 endpoints)
 
 ### POST /api/orders
 Create a new customer order.
@@ -354,7 +506,7 @@ Track order status by order number.
 
 ---
 
-## 6. Contact & Newsletter (2 endpoints)
+## 7. Contact & Newsletter (2 endpoints)
 
 ### POST /api/contact
 Submit contact form.
@@ -387,7 +539,7 @@ Subscribe to newsletter.
 
 ---
 
-## 7. Discount Codes (1 endpoint)
+## 8. Discount Codes (1 endpoint)
 
 ### POST /api/discount/validate
 Validate a discount code before checkout.
@@ -419,7 +571,7 @@ Validate a discount code before checkout.
 
 ---
 
-## 8. Wishlist (3 endpoints)
+## 9. Wishlist (3 endpoints)
 
 ### GET /api/wishlist
 Get customer wishlist.
@@ -466,7 +618,7 @@ Remove product from wishlist.
 
 ---
 
-## 9. Admin - Dashboard (1 endpoint)
+## 10. Admin - Dashboard (1 endpoint)
 
 ### GET /api/admin/dashboard/overview
 Get dashboard statistics.
@@ -492,7 +644,7 @@ Get dashboard statistics.
 
 ---
 
-## 10. Admin - Orders (3 endpoints)
+## 11. Admin - Orders (3 endpoints)
 
 ### GET /api/admin/orders
 Get all orders with filtering.
@@ -516,7 +668,7 @@ Update order details.
 
 ---
 
-## 11. Admin - Customers (2 endpoints)
+## 12. Admin - Customers (2 endpoints)
 
 ### GET /api/admin/customers
 Get all customers with search.
@@ -533,7 +685,7 @@ Get customer details with order history and addresses.
 
 ---
 
-## 12. Admin - Products (4 endpoints)
+## 13. Admin - Products (4 endpoints)
 
 ### GET /api/admin/products
 Get all products (including inactive).
@@ -573,7 +725,7 @@ Delete product.
 
 ---
 
-## 13. Admin - Payments (1 endpoint)
+## 14. Admin - Payments (1 endpoint)
 
 ### GET /api/admin/payments
 Get all payments with filtering.
@@ -585,7 +737,7 @@ Get all payments with filtering.
 
 ---
 
-## 14. Admin - Discounts (2 endpoints)
+## 15. Admin - Discounts (2 endpoints)
 
 ### GET /api/admin/discounts
 Get all discount codes.
@@ -614,7 +766,7 @@ Create discount code.
 
 ---
 
-## 15. Admin - Returns & Refunds (3 endpoints)
+## 16. Admin - Returns & Refunds (3 endpoints)
 
 ### GET /api/admin/returns
 Get all returns with filtering.
@@ -633,7 +785,7 @@ Get all refunds.
 
 ---
 
-## 16. Admin - Reports (2 endpoints)
+## 17. Admin - Reports (2 endpoints)
 
 ### GET /api/admin/reports/sales
 Get sales report.
@@ -650,7 +802,7 @@ Get product performance report.
 
 ---
 
-## 17. Admin - Compliance (2 endpoints)
+## 18. Admin - Compliance (2 endpoints)
 
 ### GET /api/admin/compliance/vat
 Get VAT records.
@@ -667,7 +819,7 @@ Get policy documents.
 
 ---
 
-## 18. Admin - Logs (2 endpoints)
+## 19. Admin - Logs (2 endpoints)
 
 ### GET /api/admin/logs/activity
 Get activity logs.

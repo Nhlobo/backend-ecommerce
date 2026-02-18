@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const reviewsController = require('../controllers/reviewsController');
-const { authenticateCustomer, authenticateAdmin } = require('../middleware/auth');
+const { authenticateToken, authenticateAdmin } = require('../middleware/auth');
 
 // =====================================================
 // PUBLIC ROUTES
@@ -31,19 +31,19 @@ router.post('/:id/helpful', reviewsController.markHelpful);
  * POST /api/reviews
  * Submit a new review (authenticated)
  */
-router.post('/', authenticateCustomer, reviewsController.submitReview);
+router.post('/', authenticateToken, reviewsController.submitReview);
 
 /**
  * PUT /api/reviews/:id
  * Update own review (authenticated)
  */
-router.put('/:id', authenticateCustomer, reviewsController.updateReview);
+router.put('/:id', authenticateToken, reviewsController.updateReview);
 
 /**
  * DELETE /api/reviews/:id
  * Delete own review (authenticated)
  */
-router.delete('/:id', authenticateCustomer, reviewsController.deleteReview);
+router.delete('/:id', authenticateToken, reviewsController.deleteReview);
 
 // =====================================================
 // ADMIN ROUTES
