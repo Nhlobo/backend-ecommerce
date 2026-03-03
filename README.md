@@ -222,7 +222,7 @@ heroku run npm run init-db
 The backend is configured to accept requests from:
 
 - **Frontend (Customer)**: `https://nhlobo.github.io`
-- **Admin Dashboard**: Your admin deployment URL
+- **Admin Dashboard**: `https://admin-ecommerce-2.onrender.com`
 - **Local Development**:
   - `http://localhost:8000` (Frontend)
   - `http://localhost:8001` (Admin)

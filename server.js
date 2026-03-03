@@ -50,6 +50,7 @@ const allowedOrigins = [
     process.env.FRONTEND_URL,
     process.env.ADMIN_URL,
     'https://nhlobo.github.io',
+    'https://admin-ecommerce-2.onrender.com',
     'http://localhost:8000',
     'http://localhost:8001',
     'http://localhost:3000',
