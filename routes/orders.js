@@ -9,6 +9,18 @@ const ordersController = require('../controllers/ordersController');
 const { authenticateToken, authenticateAdmin } = require('../middleware/auth');
 const { validateCartTotals, validateOrderTotals } = require('../middleware/serverValidation');
 
+/**
+ * If no bearer token is provided, skip this route so legacy/public
+ * order creation in publicRoutes can handle guest checkout.
+ */
+const requireAuthOrSkip = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return next('route');
+    }
+    return authenticateToken(req, res, next);
+};
+
 // =====================================================
 // CUSTOMER ROUTES (Protected)
 // =====================================================
@@ -17,7 +29,7 @@ const { validateCartTotals, validateOrderTotals } = require('../middleware/serve
  * POST /api/orders
  * Create order from cart (authenticated users only)
  */
-router.post('/', authenticateToken, validateCartTotals, validateOrderTotals, ordersController.createOrder);
+router.post('/', requireAuthOrSkip, validateCartTotals, validateOrderTotals, ordersController.createOrder);
 
 /**
  * GET /api/orders
