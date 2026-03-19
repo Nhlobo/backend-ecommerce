@@ -6,13 +6,25 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
+const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+const isRemoteDatabase =
+    hasDatabaseUrl &&
+    /render\.com|amazonaws\.com|neon\.tech|supabase\.co/i.test(process.env.DATABASE_URL);
+
 // Create connection pool
 const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME || 'premium_hair_ecommerce',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD,
+    ...(hasDatabaseUrl
+        ? {
+            connectionString: process.env.DATABASE_URL,
+            ssl: isRemoteDatabase ? { rejectUnauthorized: false } : false
+        }
+        : {
+            host: process.env.DB_HOST || 'localhost',
+            port: process.env.DB_PORT || 5432,
+            database: process.env.DB_NAME || 'premium_hair_ecommerce',
+            user: process.env.DB_USER || 'postgres',
+            password: process.env.DB_PASSWORD
+        }),
     max: 20, // Maximum number of clients in the pool
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
