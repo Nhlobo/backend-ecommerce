@@ -23,18 +23,24 @@ router.get('/', cartController.getCart);
  * Add item to cart
  */
 router.post('/items', validateCartQuantity, cartController.addToCart);
+// Backward-compatible alias (legacy frontend): POST /api/cart
+router.post('/', validateCartQuantity, cartController.addToCart);
 
 /**
  * PUT /api/cart/items/:id
  * Update cart item quantity
  */
 router.put('/items/:id', validateCartQuantity, cartController.updateCartItem);
+// Backward-compatible alias (legacy frontend): PUT /api/cart/:id
+router.put('/:id', validateCartQuantity, cartController.updateCartItem);
 
 /**
  * DELETE /api/cart/items/:id
  * Remove item from cart
  */
 router.delete('/items/:id', cartController.removeCartItem);
+// Backward-compatible alias (legacy frontend): DELETE /api/cart/:id
+router.delete('/:id', cartController.removeCartItem);
 
 /**
  * DELETE /api/cart
